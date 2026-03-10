@@ -1,0 +1,47 @@
+{
+  "cash": 98467.74925,
+  "order_counter": 3,
+  "positions": {
+    "AAPL": {
+      "quantity": 10,
+      "avg_cost": 150.075,
+      "current_price": 100.0,
+      "market_value": 1000.0,
+      "unrealized_pnl": -500.75,
+      "realized_pnl": 0.0
+    }
+  },
+  "trade_history": [
+    {
+      "timestamp": "2026-03-09T23:30:21.609996",
+      "order_id": "paper_1",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "quantity": 10,
+      "price": 150.075,
+      "commission": 1.50075,
+      "cash_after": 98497.74925
+    },
+    {
+      "timestamp": "2026-03-09T23:30:22.073983",
+      "order_id": "paper_2",
+      "symbol": "TEST",
+      "side": "BUY",
+      "quantity": 100,
+      "price": 100.05,
+      "commission": 10.005,
+      "cash_after": 88482.74424999999
+    },
+    {
+      "timestamp": "2026-03-09T23:30:22.074522",
+      "order_id": "paper_3",
+      "symbol": "TEST",
+      "side": "SELL",
+      "quantity": 100,
+      "price": 99.95,
+      "commission": 9.995000000000001,
+      "cash_after": 98467.74925
+    }
+  ],
+  "updated_at": "2026-03-09T23:30:22.074922"
+}

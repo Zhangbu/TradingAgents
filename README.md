@@ -198,6 +198,68 @@ print(decision)
 
 See `tradingagents/default_config.py` for all configuration options.
 
+## Live Trading Support
+
+TradingAgents now includes comprehensive support for real trading! See the [Live Trading Guide](docs/LIVE_TRADING_GUIDE.md) for details.
+
+### Quick Start for Live Trading
+
+1. **Install additional dependencies:**
+```bash
+pip install fastapi uvicorn sqlalchemy apscheduler alpaca-trade-api
+```
+
+2. **Set up broker credentials (Alpaca):**
+```bash
+export ALPACA_API_KEY=your_api_key
+export ALPACA_SECRET_KEY=your_secret_key
+export ALPACA_PAPER=true  # Use paper trading first!
+```
+
+3. **Start the API server:**
+```bash
+python start_api.py
+```
+
+4. **Access the API:**
+- API: http://localhost:8000
+- Interactive Docs: http://localhost:8000/docs
+
+### New Modules for Live Trading
+
+| Module | Description |
+|--------|-------------|
+| `execution/` | Order execution engine with broker integration |
+| `portfolio/` | Portfolio management and position sizing |
+| `risk/` | Risk management (stop-loss, position limits) |
+| `backtest/` | Backtesting framework with performance metrics |
+| `broker/` | Broker API adapters (Alpaca supported) |
+| `api/` | REST API for web interface |
+| `scheduler/` | Automated task scheduling |
+
+### Docker Deployment
+
+```bash
+# Build and run with Docker Compose
+docker-compose up -d
+
+# View logs
+docker-compose logs -f api
+```
+
+### API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/trading/account` | Get account information |
+| `GET /api/trading/positions` | List open positions |
+| `POST /api/trading/orders` | Place an order |
+| `POST /api/analysis/run` | Run AI analysis on a symbol |
+| `GET /api/system/status` | System status and health |
+| `GET /api/system/tasks` | Scheduled tasks management |
+
+> ⚠️ **Warning**: Always test with paper trading first. Live trading involves real money and risk.
+
 ## Contributing
 
 We welcome contributions from the community! Whether it's fixing a bug, improving documentation, or suggesting a new feature, your input helps make this project better. If you are interested in this line of research, please consider joining our open-source financial AI research community [Tauric Research](https://tauric.ai/).
