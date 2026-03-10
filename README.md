@@ -158,6 +158,114 @@ An interface will appear showing results as they load, letting you track the age
   <img src="assets/cli/cli_transaction.png" width="100%" style="display: inline-block; margin: 0 2%;">
 </p>
 
+## Web Interface & Deployment
+
+TradingAgents 提供了完整的 Web 界面，支持可视化监控、HITL 审批流程和实盘交易。
+
+### 环境配置
+
+复制环境变量模板并配置：
+
+```bash
+cp .env.example .env
+```
+
+#### 必需配置
+
+| 参数 | 说明 | 必需 |
+|------|------|------|
+| `OPENAI_API_KEY` | OpenAI (GPT) API Key | 至少配置一个 LLM |
+| `GOOGLE_API_KEY` | Google (Gemini) API Key | |
+| `ANTHROPIC_API_KEY` | Anthropic (Claude) API Key | |
+| `XAI_API_KEY` | xAI (Grok) API Key | |
+| `ALPHA_VANTAGE_API_KEY` | Alpha Vantage 金融数据 API | 推荐 |
+
+#### 交易所配置（实盘交易需要）
+
+| 参数 | 说明 |
+|------|------|
+| `BINANCE_API_KEY` / `BINANCE_API_SECRET` | Binance 交易所 |
+| `OKX_API_KEY` / `OKX_API_SECRET` / `OKX_PASSPHRASE` | OKX 交易所 |
+| `FUTU_HOST` / `FUTU_PORT` | Futu OpenD 网关 (港股/美股，默认 127.0.0.1:11111) |
+
+#### 可选配置
+
+| 参数 | 默认值 | 说明 |
+|------|------|------|
+| `LLM_PROVIDER` | `openai` | LLM 提供商 (openai/google/anthropic/xai/ollama) |
+| `DATABASE_URL` | SQLite | 数据库连接字符串 |
+| `CORS_ORIGINS` | `http://localhost:3000` | CORS 允许的域名 |
+| `SECRET_KEY` | - | 生产环境必须设置 |
+
+### 启动方式
+
+#### 方式一：Docker Compose（推荐）
+
+```bash
+# 1. 配置环境变量
+cp .env.example .env
+# 编辑 .env 文件，填入你的 API Keys
+
+# 2. 启动所有服务
+docker-compose up -d
+
+# 3. 查看日志
+docker-compose logs -f
+```
+
+#### 方式二：手动启动
+
+```bash
+# 后端服务
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+
+# 前端服务（新终端）
+cd frontend
+npm install
+npm run dev
+```
+
+#### 方式三：CLI 模式
+
+```bash
+python -m cli.main
+```
+
+### 访问地址
+
+| 服务 | 地址 | 说明 |
+|------|------|------|
+| 前端界面 | http://localhost:3000 | Web 监控界面 |
+| 后端 API | http://localhost:8000 | RESTful API |
+| API 文档 | http://localhost:8000/docs | Swagger UI |
+| Prometheus 指标 | http://localhost:8000/metrics | 监控指标 |
+
+### 功能特性
+
+- **Dashboard**：实时概览交易状态、持仓、收益
+- **Proposals**：Agent 交易提案列表，支持一键审批/拒绝
+- **Positions**：持仓管理，实时 PnL 计算
+- **Trade History**：完整交易历史记录
+- **Settings**：系统设置，包含 Kill Switch 紧急停止
+- **Agent Thinking Stream**：实时展示 Agent 分析思考过程
+
+### 监控告警
+
+项目内置 Prometheus 指标和 Grafana 仪表盘：
+
+```bash
+# 启动 Prometheus（可选）
+docker run -d -p 9090:9090 \
+  -v ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml \
+  prom/prometheus
+
+# 启动 Grafana（可选）
+docker run -d -p 3001:3000 grafana/grafana
+# 导入 monitoring/grafana/dashboards/tradingagents.json
+```
+
 ## TradingAgents Package
 
 ### Implementation Details

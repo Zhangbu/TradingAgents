@@ -1,0 +1,194 @@
+{
+  "dashboard": {
+    "title": "TradingAgents Dashboard",
+    "tags": ["trading", "agents", "monitoring"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "title": "Pending Proposals",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+        "targets": [
+          {
+            "expr": "trading_proposals_pending",
+            "legendFormat": "Pending"
+          }
+        ],
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 5},
+                {"color": "red", "value": 10}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Open Positions",
+        "type": "stat",
+        "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(trading_positions_open)",
+            "legendFormat": "Positions"
+          }
+        ]
+      },
+      {
+        "title": "WebSocket Connections",
+        "type": "stat",
+        "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+        "targets": [
+          {
+            "expr": "trading_websocket_connections",
+            "legendFormat": "Connections"
+          }
+        ]
+      },
+      {
+        "title": "Kill Switch Activations",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+        "targets": [
+          {
+            "expr": "trading_kill_switch_activations_total",
+            "legendFormat": "Total"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "red", "value": 1}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Proposal Status",
+        "type": "piechart",
+        "gridPos": {"x": 0, "y": 4, "w": 6, "h": 6},
+        "targets": [
+          {
+            "expr": "sum by (status) (trading_proposals_total)",
+            "legendFormat": "{{status}}"
+          }
+        ],
+        "options": {
+          "legend": {"displayMode": "table", "placement": "right"}
+        }
+      },
+      {
+        "title": "Trades by Exchange",
+        "type": "barchart",
+        "gridPos": {"x": 6, "y": 4, "w": 6, "h": 6},
+        "targets": [
+          {
+            "expr": "sum by (exchange) (trading_trades_executed_total)",
+            "legendFormat": "{{exchange}}"
+          }
+        ]
+      },
+      {
+        "title": "Agent Run Duration",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 4, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.5, rate(trading_agent_run_duration_seconds_bucket[5m]))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(trading_agent_run_duration_seconds_bucket[5m]))",
+            "legendFormat": "p95"
+          }
+        ]
+      },
+      {
+        "title": "Trade Execution Duration",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 10, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.5, rate(trading_trade_execution_duration_seconds_bucket[5m]))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(trading_trade_execution_duration_seconds_bucket[5m]))",
+            "legendFormat": "p99"
+          }
+        ]
+      },
+      {
+        "title": "API Request Rate",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 10, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(trading_api_requests_total[5m])",
+            "legendFormat": "{{endpoint}} {{method}}"
+          }
+        ]
+      },
+      {
+        "title": "Position PnL",
+        "type": "table",
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "trading_position_pnl",
+            "format": "table",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "title": "Risk Violations",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(trading_risk_violations_total[1h])",
+            "legendFormat": "{{violation_type}}"
+          }
+        ]
+      },
+      {
+        "title": "Agent Decisions",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 22, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(trading_agent_decisions_total[5m])",
+            "legendFormat": "{{agent_type}}: {{decision}}"
+          }
+        ]
+      },
+      {
+        "title": "Exchange Balances",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 22, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "trading_exchange_balance",
+            "legendFormat": "{{exchange}} - {{asset}}"
+          }
+        ]
+      }
+    ]
+  }
+}

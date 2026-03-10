@@ -63,20 +63,70 @@ VALID_MODELS = {
         "grok-4-fast-reasoning",
         "grok-4-fast-non-reasoning",
     ],
+    "deepseek": [
+        # DeepSeek chat models
+        "deepseek-chat",
+        "deepseek-coder",
+        # DeepSeek reasoning models
+        "deepseek-reasoner",
+    ],
+    "moonshot": [
+        # Moonshot models
+        "moonshot-v1-8k",
+        "moonshot-v1-32k",
+        "moonshot-v1-128k",
+    ],
+    "zhipu": [
+        # GLM models
+        "glm-4-plus",
+        "glm-4-0520",
+        "glm-4",
+        "glm-4-air",
+        "glm-4-airx",
+        "glm-4-flash",
+        "glm-4-long",
+        "glm-3-turbo",
+    ],
+    "siliconflow": [
+        # SiliconFlow hosts various models
+        # Validation is relaxed for this provider
+    ],
+}
+
+# Providers that accept any model (OpenAI-compatible APIs)
+OPENAI_COMPATIBLE_PROVIDERS = {
+    "ollama",       # Local models
+    "openrouter",   # Model aggregator
+    "custom",       # User-defined endpoints
+    "siliconflow",  # Model hosting platform
 }
 
 
 def validate_model(provider: str, model: str) -> bool:
     """Check if model name is valid for the given provider.
 
-    For ollama, openrouter - any model is accepted.
+    For OpenAI-compatible providers (ollama, openrouter, custom, etc.),
+    any model name is accepted.
+
+    Args:
+        provider: Provider name (case-insensitive)
+        model: Model name to validate
+
+    Returns:
+        True if model is valid for the provider, False otherwise
     """
     provider_lower = provider.lower()
 
-    if provider_lower in ("ollama", "openrouter"):
+    # OpenAI-compatible providers accept any model
+    if provider_lower in OPENAI_COMPATIBLE_PROVIDERS:
         return True
 
-    if provider_lower not in VALID_MODELS:
-        return True
+    # For providers with known models, validate against the list
+    if provider_lower in VALID_MODELS:
+        # If provider has an empty list, accept any model
+        if not VALID_MODELS[provider_lower]:
+            return True
+        return model in VALID_MODELS[provider_lower]
 
-    return model in VALID_MODELS[provider_lower]
+    # Unknown provider - accept any model (flexible for future providers)
+    return True
