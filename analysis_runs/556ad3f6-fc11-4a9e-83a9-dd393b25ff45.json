@@ -1,0 +1,20 @@
+{
+  "id": "556ad3f6-fc11-4a9e-83a9-dd393b25ff45",
+  "symbol": "AAPL",
+  "trade_date": "2026-04-26",
+  "selected_analysts": [
+    "market",
+    "social",
+    "news",
+    "fundamentals"
+  ],
+  "mode": "paper_manual",
+  "status": "failed",
+  "created_at": "2026-04-27T01:38:20.432282Z",
+  "updated_at": "2026-04-27T01:38:25.081867Z",
+  "llm_provider": null,
+  "deep_think_llm": null,
+  "quick_think_llm": null,
+  "error_message": "Failed to perform, curl: (35) TLS connect error: error:00000000:invalid library (0):OPENSSL_internal:invalid library (0). See https://curl.se/libcurl/c/libcurl-errors.html first for more details.",
+  "artifacts": null
+}

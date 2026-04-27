@@ -179,6 +179,81 @@ An interface will appear showing results as they load, letting you track the age
   <img src="assets/cli/cli_transaction.png" width="100%" style="display: inline-block; margin: 0 2%;">
 </p>
 
+## TradingAgents Platform
+
+This repository now also contains a local-first operator platform under `backend/` and `frontend/` for:
+
+- running TradingAgents analyses from a web UI
+- generating structured trade intents
+- evaluating deterministic risk checks
+- supervising Alpaca paper workflows
+- reviewing order and audit trails
+
+### Platform Configuration
+
+Copy the root environment template and fill in the values you need:
+
+```bash
+cp .env.example .env
+```
+
+At minimum, configure:
+
+- one LLM provider key such as `OPENAI_API_KEY` or `DEEPSEEK_API_KEY`
+- `TRADINGAGENTS_LLM_PROVIDER`
+- `TRADINGAGENTS_DEEP_THINK_LLM`
+- `TRADINGAGENTS_QUICK_THINK_LLM`
+- `TRADINGAGENTS_ALPACA_ENABLED`
+- `TRADINGAGENTS_ALPACA_PAPER_MODE`
+- `ALPACA_API_KEY`
+- `ALPACA_SECRET_KEY`
+- `ALPACA_BASE_URL`
+
+For a DeepSeek-based setup, this works well:
+
+```bash
+TRADINGAGENTS_LLM_PROVIDER=deepseek
+TRADINGAGENTS_DEEP_THINK_LLM=deepseek-reasoner
+TRADINGAGENTS_QUICK_THINK_LLM=deepseek-chat
+DEEPSEEK_API_KEY=...
+```
+
+For the frontend API base URL:
+
+```bash
+cp frontend/.env.local.example frontend/.env.local
+```
+
+### Platform Startup
+
+Backend:
+
+```bash
+./scripts/run_backend.sh
+```
+
+Frontend:
+
+```bash
+./scripts/run_frontend.sh
+```
+
+The helper script below prints both commands if you want a quick reminder:
+
+```bash
+./scripts/run_dev.sh
+```
+
+### Platform Pages
+
+Once both services are running, open:
+
+- `http://127.0.0.1:3000/`
+- `http://127.0.0.1:3000/analysis`
+- `http://127.0.0.1:3000/paper`
+- `http://127.0.0.1:3000/orders-audit`
+- `http://127.0.0.1:3000/settings`
+
 ## TradingAgents Package
 
 ### Implementation Details
