@@ -2,14 +2,18 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from backend.app.api.routes.analysis import router as analysis_router
+from backend.app.api.routes.auth import router as auth_router
 from backend.app.api.routes.audit import router as audit_router
 from backend.app.api.routes.automation import router as automation_router
 from backend.app.api.routes.brokers import router as brokers_router
+from backend.app.api.routes.diagnostics import router as diagnostics_router
 from backend.app.api.routes.health import router as health_router
 from backend.app.api.routes.orders import router as orders_router
 from backend.app.api.routes.trade_intents import router as trade_intent_router
+from backend.app.core.auth import get_authenticated_username
 from backend.app.core.config import get_settings
 
 settings = get_settings()
@@ -26,10 +30,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def enforce_api_authentication(request, call_next):
+    if not settings.auth_enabled:
+        return await call_next(request)
+
+    path = request.url.path
+    public_prefixes = {
+        f"{settings.api_prefix}/health",
+        f"{settings.api_prefix}/auth/login",
+        f"{settings.api_prefix}/auth/logout",
+        f"{settings.api_prefix}/auth/session",
+    }
+
+    if request.method == "OPTIONS" or path in public_prefixes:
+        return await call_next(request)
+
+    if path.startswith(settings.api_prefix):
+        username = get_authenticated_username(request, settings)
+        if username is None:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Authentication required."},
+            )
+
+    return await call_next(request)
+
 app.include_router(health_router, prefix=settings.api_prefix)
+app.include_router(auth_router, prefix=settings.api_prefix)
 app.include_router(analysis_router, prefix=settings.api_prefix)
 app.include_router(audit_router, prefix=settings.api_prefix)
 app.include_router(trade_intent_router, prefix=settings.api_prefix)
 app.include_router(orders_router, prefix=settings.api_prefix)
 app.include_router(automation_router, prefix=settings.api_prefix)
 app.include_router(brokers_router, prefix=settings.api_prefix)
+app.include_router(diagnostics_router, prefix=settings.api_prefix)

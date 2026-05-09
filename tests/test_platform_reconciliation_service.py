@@ -49,6 +49,51 @@ class ReconciliationServiceTest(unittest.TestCase):
             self.assertIsNotNone(result.synced_orders[0].last_synced_at)
             self.assertEqual(result.unmatched_local_symbols, ["AAPL"])
             self.assertTrue(automation_service.get_state().broker_sync_healthy)
+            self.assertIn("mismatches", result.summary_message or "")
+
+    def test_sync_failure_persists_failure_details_on_order(self):
+        class FailingBroker:
+            def sync_order(self, order):
+                raise RuntimeError("sync endpoint unavailable")
+
+            def get_account_snapshot(self):
+                raise AssertionError("should not reach account snapshot")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            order_repository = OrderRepository(base / "orders")
+            automation_service = AutomationControlService(
+                AutomationStateRepository(base / "automation" / "state.json")
+            )
+            service = ReconciliationService(
+                order_repository=order_repository,
+                broker_adapter=FailingBroker(),
+                automation_control_service=automation_service,
+            )
+            order = OrderRecord(
+                intent_id="intent-1",
+                analysis_id="analysis-1",
+                symbol="AAPL",
+                broker_name=BrokerName.alpaca,
+                broker_environment=BrokerEnvironment.paper,
+                side="buy",
+                order_type=OrderType.market,
+                quantity=10,
+                broker_order_id="sim-1",
+                status=OrderStatus.submitted,
+                approval_required=False,
+                submitted_at=datetime.now(timezone.utc),
+            )
+            order_repository.save(order)
+
+            with self.assertRaisesRegex(ValueError, "Broker sync failed"):
+                service.sync_order(order.id)
+
+            persisted = order_repository.get(order.id)
+            self.assertIsNotNone(persisted)
+            self.assertEqual(persisted.failure_details.code, "broker_sync_failed")
+            self.assertEqual(persisted.failure_details.component, "reconciliation")
+            self.assertFalse(automation_service.get_state().broker_sync_healthy)
 
 
 if __name__ == "__main__":

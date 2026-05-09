@@ -3,17 +3,20 @@
 import { startTransition, useEffect, useState } from "react";
 
 import { apiRequest } from "../lib/api";
+import { formatTimestamp, formatWholeDollars } from "../lib/format";
 import type {
   AccountSnapshot,
   AlpacaPaperReadiness,
   AnalysisRunRecord,
   AuditLogListResponse,
   OrderRecord,
+  PlatformPreflightSummary,
   TradeIntentRecord,
 } from "../shared/contracts/analysis";
 
 type DashboardState = {
   readiness: AlpacaPaperReadiness | null;
+  preflight: PlatformPreflightSummary | null;
   account: AccountSnapshot | null;
   orders: OrderRecord[];
   analyses: AnalysisRunRecord[];
@@ -23,6 +26,7 @@ type DashboardState = {
 
 const emptyState: DashboardState = {
   readiness: null,
+  preflight: null,
   account: null,
   orders: [],
   analyses: [],
@@ -44,9 +48,10 @@ export function DashboardOverview() {
     setError(null);
 
     try {
-      const [readiness, account, orderResponse, analysisResponse, tradeIntentResponse, audit] =
+      const [readiness, preflight, account, orderResponse, analysisResponse, tradeIntentResponse, audit] =
         await Promise.all([
           apiRequest<AlpacaPaperReadiness>("/brokers/alpaca/paper-readiness"),
+          apiRequest<PlatformPreflightSummary>("/diagnostics/preflight"),
           apiRequest<AccountSnapshot>("/orders/accounts/paper?broker_name=alpaca"),
           apiRequest<{ items: OrderRecord[] }>("/orders?limit=8"),
           apiRequest<{ items: AnalysisRunRecord[] }>("/analysis/runs?limit=6"),
@@ -56,6 +61,7 @@ export function DashboardOverview() {
 
       setState({
         readiness,
+        preflight,
         account,
         orders: orderResponse.items,
         analyses: analysisResponse.items,
@@ -85,7 +91,7 @@ export function DashboardOverview() {
       <section className="grid columns-4 dashboard-grid">
         <MetricCard
           label="Buying Power"
-          value={state.account ? `$${Math.round(state.account.buying_power).toLocaleString()}` : "--"}
+          value={formatWholeDollars(state.account?.buying_power)}
           tone="positive"
         />
         <MetricCard
@@ -99,8 +105,8 @@ export function DashboardOverview() {
         />
         <MetricCard
           label="Auto Flow"
-          value={state.readiness?.auto_ready ? "Ready" : "Paused"}
-          tone={state.readiness?.auto_ready ? "positive" : "warning"}
+          value={state.preflight?.paper_auto.ready ? "Ready" : "Paused"}
+          tone={state.preflight?.paper_auto.ready ? "positive" : "warning"}
         />
       </section>
 
@@ -129,11 +135,15 @@ export function DashboardOverview() {
           <div className="stack">
             <StatusLine
               label="Manual paper flow"
-              value={state.readiness?.manual_ready ? "Ready" : "Blocked"}
+              value={state.preflight?.paper_manual.ready ? "Ready" : "Blocked"}
             />
             <StatusLine
               label="Auto paper flow"
-              value={state.readiness?.auto_ready ? "Ready" : "Paused"}
+              value={state.preflight?.paper_auto.ready ? "Ready" : "Paused"}
+            />
+            <StatusLine
+              label="Analysis preflight"
+              value={state.preflight?.analysis.ready ? "Ready" : "Blocked"}
             />
             <StatusLine
               label="Broker connectivity"
@@ -151,7 +161,11 @@ export function DashboardOverview() {
           <span className="eyebrow">Checklist</span>
           <h2>Operator attention</h2>
           <ul className="list">
-            {(state.readiness?.checklist ?? ["Waiting for readiness data."]).map((item) => (
+            {(
+              state.preflight
+                ? collectAttentionItems(state.preflight)
+                : ["Waiting for readiness data."]
+            ).map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
@@ -297,10 +311,17 @@ function StatusLine({
   );
 }
 
-function formatTimestamp(raw: string): string {
-  try {
-    return new Date(raw).toLocaleString();
-  } catch {
-    return raw;
-  }
+function collectAttentionItems(preflight: PlatformPreflightSummary): string[] {
+  const items = [
+    ...preflight.analysis.checks,
+    ...preflight.paper_manual.checks,
+    ...preflight.paper_auto.checks,
+  ]
+    .filter((check) => check.state !== "healthy")
+    .map(
+      (check) =>
+        `${check.component}: ${check.recommended_action ?? check.message}`,
+    );
+
+  return items.length > 0 ? Array.from(new Set(items)) : ["All preflight checks are healthy."];
 }

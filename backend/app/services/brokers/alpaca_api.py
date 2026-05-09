@@ -67,14 +67,21 @@ class AlpacaApiPaperBrokerAdapter:
             "APCA-API-KEY-ID": self.config.api_key or "",
             "APCA-API-SECRET-KEY": self.config.secret_key or "",
         }
-        response = self.session.request(
-            method=method,
-            url=f"{self.base_url}{path}",
-            headers=headers,
-            timeout=15,
-            **kwargs,
-        )
-        response.raise_for_status()
+        try:
+            response = self.session.request(
+                method=method,
+                url=f"{self.base_url}{path}",
+                headers=headers,
+                timeout=15,
+                **kwargs,
+            )
+        except Exception as exc:
+            raise ValueError(self._format_transport_error(path, exc)) from exc
+
+        try:
+            response.raise_for_status()
+        except Exception as exc:
+            raise ValueError(self._format_http_error(path, response, exc)) from exc
         return response
 
     def _merge_remote_order(self, order: OrderRecord, remote: dict[str, Any]) -> OrderRecord:
@@ -180,3 +187,35 @@ class AlpacaApiPaperBrokerAdapter:
             ) from exc
 
         return requests.Session()
+
+    def _format_transport_error(self, path: str, exc: Exception) -> str:
+        message = str(exc)
+        lowered = message.lower()
+        if "ssl" in lowered or "tls" in lowered:
+            return (
+                f"Alpaca API request to {path} failed during TLS/SSL setup. "
+                "Check local certificate/network settings or switch back to simulator mode."
+            )
+        if "timed out" in lowered or "timeout" in lowered:
+            return (
+                f"Alpaca API request to {path} timed out. "
+                "Check connectivity to the paper endpoint and retry."
+            )
+        return f"Alpaca API request to {path} failed before the broker responded: {message}"
+
+    def _format_http_error(self, path: str, response, exc: Exception) -> str:
+        status_code = getattr(response, "status_code", None)
+        body = getattr(response, "text", "") or ""
+        snippet = body.strip().replace("\n", " ")
+        if len(snippet) > 200:
+            snippet = snippet[:200] + "..."
+
+        if status_code == 401:
+            return (
+                f"Alpaca API request to {path} was rejected with 401 Unauthorized. "
+                "Verify the paper API key/secret and confirm the backend was restarted after editing .env."
+            )
+        if status_code:
+            detail = f" Response: {snippet}" if snippet else ""
+            return f"Alpaca API request to {path} failed with HTTP {status_code}.{detail}"
+        return f"Alpaca API request to {path} failed: {exc}"

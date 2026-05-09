@@ -152,7 +152,7 @@ class AutomationControlService:
             raise ValueError(f"{action_label} is blocked because the kill switch is active.")
         if not snapshot.broker_sync_healthy:
             raise ValueError(f"{action_label} is blocked because broker sync is unhealthy.")
-        if snapshot.broker_sync_stale:
+        if snapshot.broker_sync_stale and (is_auto or is_live):
             raise ValueError(f"{action_label} is blocked because broker sync is stale.")
         if is_auto and not snapshot.effective_auto_trading_enabled:
             raise ValueError(f"{action_label} is blocked because auto trading is disabled.")

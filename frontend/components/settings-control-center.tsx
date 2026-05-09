@@ -5,7 +5,11 @@ import { startTransition, useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
 import type {
   AlpacaPaperReadiness,
+  AnalysisRuntimeCatalog,
+  AnalysisRuntimeHealth,
+  AnalysisRuntimeProfile,
   AutomationState,
+  PlatformPreflightSummary,
 } from "../shared/contracts/analysis";
 
 type SchedulerTargetMode = "paper_auto" | "paper_manual" | "analysis_only";
@@ -13,6 +17,10 @@ type SchedulerTargetMode = "paper_auto" | "paper_manual" | "analysis_only";
 export function SettingsControlCenter() {
   const [readiness, setReadiness] = useState<AlpacaPaperReadiness | null>(null);
   const [automationState, setAutomationState] = useState<AutomationState | null>(null);
+  const [runtimeProfile, setRuntimeProfile] = useState<AnalysisRuntimeProfile | null>(null);
+  const [runtimeCatalog, setRuntimeCatalog] = useState<AnalysisRuntimeCatalog | null>(null);
+  const [runtimeHealth, setRuntimeHealth] = useState<AnalysisRuntimeHealth | null>(null);
+  const [preflight, setPreflight] = useState<PlatformPreflightSummary | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -32,17 +40,32 @@ export function SettingsControlCenter() {
     setError(null);
 
     try {
-      const [nextReadiness, nextAutomationState] = await Promise.all([
+      const [
+        readinessSnapshot,
+        automationSnapshot,
+        profileSnapshot,
+        catalogSnapshot,
+        healthSnapshot,
+        preflightSnapshot,
+      ] = await Promise.all([
         apiRequest<AlpacaPaperReadiness>("/brokers/alpaca/paper-readiness"),
         apiRequest<AutomationState>("/automation/state"),
+        apiRequest<AnalysisRuntimeProfile>("/analysis/runtime-profile"),
+        apiRequest<AnalysisRuntimeCatalog>("/analysis/runtime-catalog"),
+        apiRequest<AnalysisRuntimeHealth>("/analysis/runtime-health"),
+        apiRequest<PlatformPreflightSummary>("/diagnostics/preflight"),
       ]);
 
-      setReadiness(nextReadiness);
-      setAutomationState(nextAutomationState);
-      setSchedulerEnabled(nextAutomationState.scheduler.enabled);
-      setSchedulerInterval(String(nextAutomationState.scheduler.interval_minutes));
+      setReadiness(readinessSnapshot);
+      setAutomationState(automationSnapshot);
+      setRuntimeProfile(profileSnapshot);
+      setRuntimeCatalog(catalogSnapshot);
+      setRuntimeHealth(healthSnapshot);
+      setPreflight(preflightSnapshot);
+      setSchedulerEnabled(automationSnapshot.scheduler.enabled);
+      setSchedulerInterval(String(automationSnapshot.scheduler.interval_minutes));
       setSchedulerTargetMode(
-        (nextAutomationState.scheduler.target_mode as SchedulerTargetMode) ?? "paper_auto",
+        (automationSnapshot.scheduler.target_mode as SchedulerTargetMode) ?? "paper_auto",
       );
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Settings load failed.");
@@ -197,6 +220,146 @@ export function SettingsControlCenter() {
       )}
 
       <section className="grid columns-2">
+        <article className="card">
+          <span className="eyebrow">Preflight summary</span>
+          <h2>Workflow gates</h2>
+          <div className="stack">
+            <StatusLine
+              label="Analysis"
+              value={preflight?.analysis.ready ? "Ready" : `Blocked (${preflight?.analysis.blocker_count ?? 0})`}
+            />
+            <StatusLine
+              label="Paper manual"
+              value={preflight?.paper_manual.ready ? "Ready" : `Blocked (${preflight?.paper_manual.blocker_count ?? 0})`}
+            />
+            <StatusLine
+              label="Paper auto"
+              value={preflight?.paper_auto.ready ? "Ready" : `Blocked (${preflight?.paper_auto.blocker_count ?? 0})`}
+            />
+          </div>
+        </article>
+
+        <article className="card">
+          <span className="eyebrow">Analysis runtime</span>
+          <h2>Provider and model profile</h2>
+          <div className="stack">
+            <StatusLine label="LLM provider" value={runtimeProfile?.llm_provider ?? "--"} />
+            <StatusLine label="Deep model" value={runtimeProfile?.deep_think_llm ?? "--"} />
+            <StatusLine label="Quick model" value={runtimeProfile?.quick_think_llm ?? "--"} />
+            <StatusLine
+              label="Core stock vendor"
+              value={runtimeProfile?.data_vendors.core_stock_apis ?? "--"}
+            />
+            <StatusLine
+              label="News vendor"
+              value={runtimeProfile?.data_vendors.news_data ?? "--"}
+            />
+            <StatusLine
+              label="Fallback policy"
+              value={runtimeProfile?.vendor_fallback_policy ?? "--"}
+            />
+          </div>
+        </article>
+
+        <article className="card">
+          <span className="eyebrow">Diagnostics</span>
+          <h2>LLM and market data health</h2>
+          <div className="stack">
+            <div className="inline-panel">
+              <strong>LLM • {runtimeHealth?.llm.state ?? "--"}</strong>
+              <p>{runtimeHealth?.llm.message ?? "Waiting for runtime health."}</p>
+              {runtimeHealth?.llm.recommended_action ? (
+                <p>{runtimeHealth.llm.recommended_action}</p>
+              ) : null}
+            </div>
+            <div className="inline-panel">
+              <strong>Market data • {runtimeHealth?.market_data.state ?? "--"}</strong>
+              <p>{runtimeHealth?.market_data.message ?? "Waiting for runtime health."}</p>
+              {runtimeHealth?.market_data.recommended_action ? (
+                <p>{runtimeHealth.market_data.recommended_action}</p>
+              ) : null}
+            </div>
+          </div>
+        </article>
+
+        <article className="card">
+          <span className="eyebrow">Credential matrix</span>
+          <h2>Provider readiness</h2>
+          <div className="stack">
+            {runtimeCatalog ? (
+              Object.entries(runtimeCatalog.providers).map(([provider, config]) => (
+                <div key={provider} className="inline-panel">
+                  <strong>
+                    {provider}
+                    {runtimeProfile?.llm_provider === provider ? " • active" : ""}
+                  </strong>
+                  <p>
+                    key env • {config.api_key_env ?? "--"} •{" "}
+                    {runtimeProfile?.api_keys_present[provider] ? "present" : "missing"}
+                  </p>
+                  <p>{config.backend_url ?? "No backend URL registered."}</p>
+                </div>
+              ))
+            ) : (
+              <p className="muted">Runtime catalog is loading.</p>
+            )}
+          </div>
+        </article>
+      </section>
+
+      <section className="grid columns-2">
+        <article className="card">
+          <span className="eyebrow">Data vendor profile</span>
+          <h2>Category routing</h2>
+          <div className="stack">
+            {runtimeCatalog ? (
+              runtimeCatalog.data_vendor_categories.map((category) => (
+                <div key={category.category} className="inline-panel">
+                  <strong>{category.label}</strong>
+                  <p>
+                    current •{" "}
+                    {runtimeProfile?.data_vendors[category.category] ?? category.current_vendor}
+                  </p>
+                  <p>options • {category.options.join(", ")}</p>
+                </div>
+              ))
+            ) : (
+              <p className="muted">No data vendor catalog loaded yet.</p>
+            )}
+          </div>
+        </article>
+
+        <article className="card">
+          <span className="eyebrow">Model shortlist</span>
+          <h2>Active provider suggestions</h2>
+          <div className="stack">
+            {runtimeCatalog && runtimeProfile ? (
+              <>
+                <div className="inline-panel">
+                  <strong>Quick models</strong>
+                  <p>
+                    {runtimeCatalog.providers[runtimeProfile.llm_provider]?.quick_models
+                      .slice(0, 3)
+                      .map((option) => option.value)
+                      .join(", ") || "--"}
+                  </p>
+                </div>
+                <div className="inline-panel">
+                  <strong>Deep models</strong>
+                  <p>
+                    {runtimeCatalog.providers[runtimeProfile.llm_provider]?.deep_models
+                      .slice(0, 3)
+                      .map((option) => option.value)
+                      .join(", ") || "--"}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <p className="muted">Runtime catalog is loading.</p>
+            )}
+          </div>
+        </article>
+
         <article className="card">
           <span className="eyebrow">Broker connection</span>
           <h2>Alpaca paper status</h2>

@@ -3,12 +3,24 @@
 import { startTransition, useEffect, useState } from "react";
 
 import { apiBaseUrl, apiRequest } from "../lib/api";
+import {
+  formatPrice,
+  formatTimestamp,
+  formatWholeDollars,
+  getTodayDateInputValue,
+} from "../lib/format";
+import { explainBrokerStatus, summarizeExecutionState } from "../lib/order-status";
 import type {
   AccountSnapshot,
   AlpacaPaperReadiness,
   AnalysisRunRecord,
+  AnalysisRuntimeHealth,
+  AnalysisRuntimeProfile,
   AutomationHealthSnapshot,
+  BrokerSyncResult,
+  FailureDetails,
   OrderRecord,
+  PlatformPreflightSummary,
   TradeIntentRecord,
 } from "../shared/contracts/analysis";
 
@@ -24,7 +36,7 @@ const initialLaunchResult: LaunchResult = {};
 
 export function AlpacaPaperConsole() {
   const [symbol, setSymbol] = useState("AAPL");
-  const [tradeDate, setTradeDate] = useState("2026-04-26");
+  const [tradeDate, setTradeDate] = useState("");
   const [flowMode, setFlowMode] = useState<FlowMode>("paper_manual");
   const [referencePrice, setReferencePrice] = useState("100");
   const [limitPrice, setLimitPrice] = useState("1");
@@ -33,8 +45,12 @@ export function AlpacaPaperConsole() {
   const [readiness, setReadiness] = useState<AlpacaPaperReadiness | null>(null);
   const [automationHealth, setAutomationHealth] =
     useState<AutomationHealthSnapshot | null>(null);
+  const [runtimeProfile, setRuntimeProfile] = useState<AnalysisRuntimeProfile | null>(null);
+  const [runtimeHealth, setRuntimeHealth] = useState<AnalysisRuntimeHealth | null>(null);
+  const [preflight, setPreflight] = useState<PlatformPreflightSummary | null>(null);
   const [account, setAccount] = useState<AccountSnapshot | null>(null);
   const [orders, setOrders] = useState<OrderRecord[]>([]);
+  const [lastSyncResult, setLastSyncResult] = useState<BrokerSyncResult | null>(null);
   const [launchResult, setLaunchResult] =
     useState<LaunchResult>(initialLaunchResult);
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -43,6 +59,7 @@ export function AlpacaPaperConsole() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   useEffect(() => {
+    setTradeDate(getTodayDateInputValue());
     void refreshConsole();
   }, []);
 
@@ -51,16 +68,30 @@ export function AlpacaPaperConsole() {
     setError(null);
 
     try {
-      const [nextReadiness, nextAutomationHealth, nextAccount, nextOrders] =
+      const [
+        nextReadiness,
+        nextAutomationHealth,
+        nextRuntimeProfile,
+        nextRuntimeHealth,
+        nextPreflight,
+        nextAccount,
+        nextOrders,
+      ] =
         await Promise.all([
           apiRequest<AlpacaPaperReadiness>("/brokers/alpaca/paper-readiness"),
           apiRequest<AutomationHealthSnapshot>("/automation/health"),
+          apiRequest<AnalysisRuntimeProfile>("/analysis/runtime-profile"),
+          apiRequest<AnalysisRuntimeHealth>("/analysis/runtime-health"),
+          apiRequest<PlatformPreflightSummary>("/diagnostics/preflight"),
           apiRequest<AccountSnapshot>("/orders/accounts/paper?broker_name=alpaca"),
           apiRequest<{ items: OrderRecord[] }>("/orders?limit=12"),
         ]);
 
       setReadiness(nextReadiness);
       setAutomationHealth(nextAutomationHealth);
+      setRuntimeProfile(nextRuntimeProfile);
+      setRuntimeHealth(nextRuntimeHealth);
+      setPreflight(nextPreflight);
       setAccount(nextAccount);
       const nextAlpacaOrders = nextOrders.items.filter((order) => order.broker_name === "alpaca");
       setOrders(nextAlpacaOrders);
@@ -128,6 +159,24 @@ export function AlpacaPaperConsole() {
   }
 
   async function launchFlow() {
+    if (!runtimeProfile) {
+      setError("Analysis runtime profile has not loaded yet. Refresh the console and try again.");
+      return;
+    }
+    const targetPreflight =
+      flowMode === "paper_auto" ? preflight?.paper_auto : preflight?.paper_manual;
+    if (targetPreflight && !targetPreflight.ready) {
+      const blocker =
+        targetPreflight.checks.find((check) => check.state === "blocked") ??
+        targetPreflight.checks[0];
+      setError(
+        blocker?.recommended_action ??
+          blocker?.message ??
+          `${flowMode} preflight is blocked.`,
+      );
+      return;
+    }
+
     setBusyAction("launch");
     setError(null);
     setNotice(null);
@@ -140,6 +189,10 @@ export function AlpacaPaperConsole() {
           symbol,
           trade_date: tradeDate,
           selected_analysts: ["market", "social", "news", "fundamentals"],
+          llm_provider: runtimeProfile.llm_provider,
+          deep_think_llm: runtimeProfile.deep_think_llm,
+          quick_think_llm: runtimeProfile.quick_think_llm,
+          data_vendors: runtimeProfile.data_vendors,
           mode: flowMode,
         }),
       });
@@ -179,6 +232,7 @@ export function AlpacaPaperConsole() {
         tradeIntent: evaluatedIntent,
         order: createdOrder,
       });
+      setLastSyncResult(null);
       await refreshConsole();
       setNotice("Paper flow launched successfully.");
     } catch (launchError) {
@@ -219,9 +273,12 @@ export function AlpacaPaperConsole() {
     setNotice(null);
 
     try {
-      await apiRequest(`/orders/${orderId}/sync`, { method: "POST" });
+      const syncResult = await apiRequest<BrokerSyncResult>(`/orders/${orderId}/sync`, {
+        method: "POST",
+      });
+      setLastSyncResult(syncResult);
       await refreshConsole();
-      setNotice("Order synced from Alpaca paper.");
+      setNotice(syncResult.summary_message ?? "Order synced from Alpaca paper.");
     } catch (syncError) {
       setError(normalizeError(syncError));
       setBusyAction(null);
@@ -261,13 +318,19 @@ export function AlpacaPaperConsole() {
     orders.find((order) => order.id === selectedOrderId) ??
     orders[0] ??
     null;
+  const focusOrderStatusNote = focusOrder
+    ? explainBrokerStatus(focusOrder.broker_status_raw, focusOrder.status)
+    : null;
+  const focusExecutionState = focusOrder ? summarizeExecutionState(focusOrder) : null;
+  const manualChecks = preflight?.paper_manual.checks ?? [];
+  const autoChecks = preflight?.paper_auto.checks ?? [];
 
   return (
     <div className="stack">
       <section className="hero hero-console">
         <div className="hero-copy">
           <span className="eyebrow">Alpaca Paper Console</span>
-          <h1>Launch, approve, sync, and cancel paper trades from one desk.</h1>
+          <h1 className="hero-title-tight">Operate paper trades from one terminal.</h1>
           <p>
             The backend workflow is already live. This console turns it into an operator
             path you can actually use while we keep tightening the frontend.
@@ -282,9 +345,21 @@ export function AlpacaPaperConsole() {
                 void launchFlow();
               });
             }}
-            disabled={busyAction !== null}
+            disabled={
+              busyAction !== null ||
+              runtimeProfile === null ||
+              (flowMode === "paper_auto"
+                ? preflight?.paper_auto.ready === false
+                : preflight?.paper_manual.ready === false)
+            }
           >
-            {busyAction === "launch" ? "Launching..." : "Launch paper flow"}
+            {busyAction === "launch"
+              ? "Launching..."
+              : flowMode === "paper_auto" && preflight?.paper_auto.ready === false
+                ? "Auto preflight blocked"
+                : flowMode === "paper_manual" && preflight?.paper_manual.ready === false
+                  ? "Manual preflight blocked"
+                  : "Launch paper flow"}
           </button>
           <button
             className="button-secondary"
@@ -318,9 +393,76 @@ export function AlpacaPaperConsole() {
         <article className="card metric-card">
           <span className="pill">Account</span>
           <p className="metric">
-            {account ? `$${Math.round(account.buying_power).toLocaleString()}` : "--"}
+            {formatWholeDollars(account?.buying_power)}
           </p>
           <p>Current Alpaca paper buying power.</p>
+        </article>
+      </section>
+
+      <section className="grid columns-2 section-tight">
+        <article className="card">
+          <span className="eyebrow">Analysis runtime</span>
+          <h2>Current provider and data source</h2>
+          <div className="stack">
+            <div className="status-row">
+              <span>LLM provider</span>
+              <strong>{runtimeProfile?.llm_provider ?? "--"}</strong>
+            </div>
+            <div className="status-row">
+              <span>Deep model</span>
+              <strong>{runtimeProfile?.deep_think_llm ?? "--"}</strong>
+            </div>
+            <div className="status-row">
+              <span>Core stock vendor</span>
+              <strong>{runtimeProfile?.data_vendors.core_stock_apis ?? "--"}</strong>
+            </div>
+            <div className="status-row">
+              <span>News vendor</span>
+              <strong>{runtimeProfile?.data_vendors.news_data ?? "--"}</strong>
+            </div>
+            <div className="status-row">
+              <span>Fallback policy</span>
+              <strong>{runtimeProfile?.vendor_fallback_policy ?? "--"}</strong>
+            </div>
+          </div>
+        </article>
+
+        <article className="card">
+          <span className="eyebrow">Runtime health</span>
+          <h2>Pre-flight checks</h2>
+          <div className="stack">
+            <div className="inline-panel">
+              <strong>LLM • {runtimeHealth?.llm.state ?? "--"}</strong>
+              <p>{runtimeHealth?.llm.message ?? "Waiting for runtime health."}</p>
+            </div>
+            <div className="inline-panel">
+              <strong>Market data • {runtimeHealth?.market_data.state ?? "--"}</strong>
+              <p>{runtimeHealth?.market_data.message ?? "Waiting for runtime health."}</p>
+            </div>
+            <div className="inline-panel">
+              <strong>
+                Flow preflight •{" "}
+                {flowMode === "paper_auto"
+                  ? preflight?.paper_auto.state ?? "--"
+                  : preflight?.paper_manual.state ?? "--"}
+              </strong>
+              <p>
+                {flowMode === "paper_auto"
+                  ? preflight?.paper_auto.ready
+                    ? "paper_auto is ready to launch."
+                    : "paper_auto is blocked until the failed gate is resolved."
+                  : preflight?.paper_manual.ready
+                    ? "paper_manual is ready to launch."
+                    : "paper_manual is blocked until the failed gate is resolved."}
+              </p>
+            </div>
+            {runtimeHealth?.market_data.recommended_action ? (
+              <div className="inline-panel">
+                <strong>Recommended next step</strong>
+                <p>{runtimeHealth.market_data.recommended_action}</p>
+              </div>
+            ) : null}
+          </div>
         </article>
       </section>
 
@@ -341,7 +483,11 @@ export function AlpacaPaperConsole() {
             </label>
             <label className="field">
               <span>Trade date</span>
-              <input value={tradeDate} onChange={(event) => setTradeDate(event.target.value)} />
+              <input
+                type="date"
+                value={tradeDate}
+                onChange={(event) => setTradeDate(event.target.value)}
+              />
             </label>
             <label className="field">
               <span>Mode</span>
@@ -363,7 +509,7 @@ export function AlpacaPaperConsole() {
               <input value={limitPrice} onChange={(event) => setLimitPrice(event.target.value)} />
             </label>
           </div>
-          <div className="actions">
+          <div className="actions form-actions">
             <button
               className="button"
               type="button"
@@ -398,7 +544,7 @@ export function AlpacaPaperConsole() {
               <strong>{automationHealth?.effective_auto_trading_enabled ? "Enabled" : "Paused"}</strong>
             </div>
           </div>
-          <div className="actions">
+          <div className="actions form-actions">
             <button
               className="button"
               type="button"
@@ -453,30 +599,106 @@ export function AlpacaPaperConsole() {
 
       <section className="grid columns-2">
         <article className="card">
-          <h2>Latest launch trace</h2>
+          <span className="eyebrow">Broker observability</span>
+          <h2>Live paper runtime snapshot</h2>
           <div className="stack">
-            <TraceItem
+            <StatusPanel
+              label="Broker check"
+              value={readiness?.broker_health.connectivity_ok ? "Healthy" : "Attention"}
+              detail={readiness?.broker_health.message ?? "Waiting for broker diagnostics."}
+            />
+            <StatusPanel
+              label="Checked at"
+              value={formatTimestamp(readiness?.broker_health.checked_at)}
+              detail={`Base URL • ${readiness?.broker_health.base_url ?? "--"}`}
+            />
+            <StatusPanel
+              label="Last broker sync"
+              value={formatTimestamp(automationHealth?.state.last_broker_sync_at)}
+              detail={
+                automationHealth?.broker_sync_stale
+                  ? "The broker snapshot is stale, so automation remains cautious."
+                  : automationHealth?.broker_sync_healthy
+                    ? "The broker snapshot is fresh enough for guarded execution."
+                    : "Broker sync is currently unhealthy."
+              }
+            />
+            <StatusPanel
+              label="Execution path"
+              value={readiness?.broker_health.integration_mode ?? "--"}
+              detail={
+                readiness?.broker_health.integration_mode === "api"
+                  ? "Orders flow to Alpaca paper over the remote API."
+                  : "Orders are currently handled by the local simulator path."
+              }
+            />
+          </div>
+        </article>
+
+        <article className="card">
+          <span className="eyebrow">Flow suitability</span>
+          <h2>Manual and auto gates</h2>
+          <div className="stack">
+            <FlowSuitability
+              title="paper_manual"
+              ready={Boolean(preflight?.paper_manual.ready)}
+              state={preflight?.paper_manual.state ?? "--"}
+              checks={manualChecks}
+            />
+            <FlowSuitability
+              title="paper_auto"
+              ready={Boolean(preflight?.paper_auto.ready)}
+              state={preflight?.paper_auto.state ?? "--"}
+              checks={autoChecks}
+            />
+          </div>
+        </article>
+      </section>
+
+      <section className="grid columns-2">
+        <article className="card">
+          <h2>Latest launch trace</h2>
+          <div className="phase-grid">
+            <PhaseCard
               label="Analysis"
-              body={
+              state={launchResult.analysis ? launchResult.analysis.status : "idle"}
+              detail={
                 launchResult.analysis
-                  ? `${launchResult.analysis.symbol} • ${launchResult.analysis.status} • ${launchResult.analysis.id}`
+                  ? `${launchResult.analysis.symbol} • ${launchResult.analysis.id}`
                   : "No new analysis yet."
               }
             />
-            <TraceItem
+            <PhaseCard
               label="Trade intent"
-              body={
+              state={launchResult.tradeIntent ? launchResult.tradeIntent.status : "idle"}
+              detail={
                 launchResult.tradeIntent
-                  ? `${launchResult.tradeIntent.side} • ${launchResult.tradeIntent.status} • ${launchResult.tradeIntent.id}`
+                  ? `${launchResult.tradeIntent.side} • ${launchResult.tradeIntent.id}`
                   : "No trade intent yet."
               }
             />
-            <TraceItem
+            <PhaseCard
               label="Order"
-              body={
+              state={launchResult.order ? launchResult.order.status : "idle"}
+              detail={
                 launchResult.order
-                  ? `${launchResult.order.status} • ${launchResult.order.broker_status_raw ?? "local"} • ${launchResult.order.id}`
+                  ? `${launchResult.order.broker_status_raw ?? "local"} • ${launchResult.order.id}`
                   : "No order created yet."
+              }
+            />
+            <PhaseCard
+              label="Reconciliation"
+              state={
+                lastSyncResult
+                  ? lastSyncResult.requires_operator_review
+                    ? "review_required"
+                    : "synced"
+                  : "idle"
+              }
+              detail={
+                lastSyncResult
+                  ? lastSyncResult.summary_message ?? "sync completed"
+                  : "No sync result captured yet."
               }
             />
           </div>
@@ -518,7 +740,41 @@ export function AlpacaPaperConsole() {
                   {focusOrder.quantity} shares
                 </p>
               </div>
-              <OrderTimeline order={focusOrder} />
+              {focusOrderStatusNote ? (
+                <div className="inline-panel">
+                  <strong>Broker status note • {focusOrderStatusNote.label}</strong>
+                  <p>{focusOrderStatusNote.meaning}</p>
+                  {focusOrderStatusNote.marketHint ? (
+                    <p>{focusOrderStatusNote.marketHint}</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {focusExecutionState ? (
+                <div className={`inline-panel execution-state execution-${focusExecutionState.tone}`}>
+                  <strong>{focusExecutionState.label}</strong>
+                  <p>{focusExecutionState.detail}</p>
+                </div>
+              ) : null}
+              <OrderTimeline
+                order={focusOrder}
+                analysis={launchResult.analysis?.id === focusOrder.analysis_id ? launchResult.analysis : null}
+                tradeIntent={launchResult.tradeIntent?.analysis_id === focusOrder.analysis_id ? launchResult.tradeIntent : null}
+                syncResult={lastSyncResult}
+              />
+              <FailureCallout failure={focusOrder.failure_details} />
+              {lastSyncResult ? (
+                <div className="inline-panel">
+                  <strong>Reconciliation snapshot</strong>
+                  <p>{lastSyncResult.summary_message ?? "Sync completed."}</p>
+                  {lastSyncResult.requires_operator_review ? (
+                    <p>
+                      Unmatched local: {formatSymbolList(lastSyncResult.unmatched_local_symbols)} •
+                      unmatched broker: {formatSymbolList(lastSyncResult.unmatched_broker_symbols)}
+                    </p>
+                  ) : null}
+                  <FailureCallout failure={lastSyncResult.failure_details} compact />
+                </div>
+              ) : null}
             </div>
           ) : (
             <p className="muted">Launch a paper flow to populate the order timeline.</p>
@@ -556,15 +812,15 @@ export function AlpacaPaperConsole() {
             <div className="stack">
               <div className="status-row">
                 <span>Cash</span>
-                <strong>${Math.round(account.cash).toLocaleString()}</strong>
+                <strong>{formatWholeDollars(account.cash)}</strong>
               </div>
               <div className="status-row">
                 <span>Equity</span>
-                <strong>${Math.round(account.equity).toLocaleString()}</strong>
+                <strong>{formatWholeDollars(account.equity)}</strong>
               </div>
               <div className="status-row">
                 <span>Buying power</span>
-                <strong>${Math.round(account.buying_power).toLocaleString()}</strong>
+                <strong>{formatWholeDollars(account.buying_power)}</strong>
               </div>
               <div className="inline-panel">
                 <strong>Positions</strong>
@@ -623,9 +879,16 @@ export function AlpacaPaperConsole() {
                       </button>
                     </td>
                     <td>
-                      <span className={`status-badge status-${order.status}`}>
-                        {order.status}
-                      </span>
+                      <div className="stack status-stack">
+                        <span className={`status-badge status-${order.status}`}>
+                          {order.status}
+                        </span>
+                        <span
+                          className={`status-note status-note-${summarizeExecutionState(order).tone}`}
+                        >
+                          {summarizeExecutionState(order).label}
+                        </span>
+                      </div>
                     </td>
                     <td>{order.broker_status_raw ?? "local"}</td>
                     <td>
@@ -682,27 +945,164 @@ function TraceItem({ label, body }: { label: string; body: string }) {
   );
 }
 
-function OrderTimeline({ order }: { order: OrderRecord }) {
+function PhaseCard({
+  label,
+  state,
+  detail,
+}: {
+  label: string;
+  state: string;
+  detail: string;
+}) {
+  const tone = getPhaseTone(state);
+
+  return (
+    <div className={`inline-panel phase-card phase-${tone}`}>
+      <strong>{label}</strong>
+      <p className="phase-state">{state}</p>
+      <p>{detail}</p>
+    </div>
+  );
+}
+
+function StatusPanel({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="inline-panel">
+      <strong>{label}</strong>
+      <p>{value}</p>
+      <p>{detail}</p>
+    </div>
+  );
+}
+
+function FlowSuitability({
+  title,
+  ready,
+  state,
+  checks,
+}: {
+  title: string;
+  ready: boolean;
+  state: string;
+  checks: PlatformPreflightSummary["analysis"]["checks"];
+}) {
+  const blockers = checks.filter((check) => check.state === "blocked");
+  const warnings = checks.filter((check) => check.state === "warning");
+  const topIssue = blockers[0] ?? warnings[0] ?? null;
+
+  return (
+    <div className="inline-panel">
+      <strong>
+        {title} • {ready ? "ready" : state}
+      </strong>
+      <p>
+        blockers {blockers.length} • warnings {warnings.length}
+      </p>
+      <p>
+        {topIssue
+          ? topIssue.recommended_action ?? topIssue.message
+          : "All workflow gates currently look healthy."}
+      </p>
+    </div>
+  );
+}
+
+function getPhaseTone(state: string): "idle" | "active" | "failed" | "complete" {
+  if (["failed", "blocked", "rejected", "review_required"].includes(state)) {
+    return "failed";
+  }
+  if (["completed", "filled", "synced", "ready", "approval_required"].includes(state)) {
+    return "complete";
+  }
+  if (["running", "submitted", "partially_filled", "pending_approval"].includes(state)) {
+    return "active";
+  }
+  return "idle";
+}
+
+function OrderTimeline({
+  order,
+  analysis,
+  tradeIntent,
+  syncResult,
+}: {
+  order: OrderRecord;
+  analysis: AnalysisRunRecord | null;
+  tradeIntent: TradeIntentRecord | null;
+  syncResult: BrokerSyncResult | null;
+}) {
+  const executionState = summarizeExecutionState(order);
   const steps = [
     {
-      label: "Intent linked",
-      active: true,
-      detail: order.intent_id,
+      label: "Analysis",
+      active: analysis !== null,
+      detail:
+        analysis === null
+          ? "No linked analysis loaded"
+          : analysis.failure_details
+            ? analysis.failure_details.code
+            : `${analysis.status} • ${analysis.llm_provider ?? "default"}`,
+      tone: analysis?.status === "failed" ? "failed" : analysis ? "active" : "idle",
+    },
+    {
+      label: "Trade intent",
+      active: tradeIntent !== null,
+      detail:
+        tradeIntent === null
+          ? order.intent_id
+          : `${tradeIntent.side} • ${tradeIntent.status} • confidence ${Math.round(
+              tradeIntent.confidence * 100,
+            )}%`,
+      tone:
+        tradeIntent?.status === "blocked"
+          ? "failed"
+          : tradeIntent
+            ? "active"
+            : "idle",
     },
     {
       label: "Approval",
       active: order.approval_required ? order.status !== "pending_approval" : true,
       detail: order.approval_required ? "Manual gate" : "Auto path",
+      tone: order.status === "rejected" ? "failed" : order.approval_required ? "active" : "idle",
     },
     {
-      label: "Submitted",
-      active: ["submitted", "partially_filled", "filled", "canceled"].includes(order.status),
+      label: "Order submission",
+      active: ["submitted", "partially_filled", "filled", "canceled", "failed"].includes(order.status),
       detail: order.submitted_at ? formatTimestamp(order.submitted_at) : "Waiting",
+      tone: order.status === "failed" ? "failed" : order.submitted_at ? "active" : "idle",
+    },
+    {
+      label: "Market execution",
+      active: Boolean(order.broker_status_raw) || executionState.tone !== "active",
+      detail: `${executionState.label} • ${order.broker_status_raw ?? order.status}`,
+      tone:
+        executionState.tone === "failed"
+          ? "failed"
+          : executionState.tone === "waiting"
+            ? "idle"
+            : "active",
     },
     {
       label: "Broker sync",
-      active: Boolean(order.last_synced_at),
-      detail: order.last_synced_at ? formatTimestamp(order.last_synced_at) : "Not synced yet",
+      active: Boolean(order.last_synced_at) || syncResult !== null,
+      detail:
+        syncResult?.summary_message ??
+        (order.last_synced_at ? formatTimestamp(order.last_synced_at) : "Not synced yet"),
+      tone:
+        syncResult?.failure_details || order.failure_details
+          ? "failed"
+          : order.last_synced_at || syncResult
+            ? "active"
+            : "idle",
     },
     {
       label: "Closed",
@@ -713,6 +1113,12 @@ function OrderTimeline({ order }: { order: OrderRecord }) {
           : order.filled_at
             ? formatTimestamp(order.filled_at)
             : order.status,
+      tone:
+        ["failed", "rejected", "expired"].includes(order.status)
+          ? "failed"
+          : ["filled", "canceled"].includes(order.status)
+            ? "active"
+            : "idle",
     },
   ];
 
@@ -721,7 +1127,9 @@ function OrderTimeline({ order }: { order: OrderRecord }) {
       {steps.map((step) => (
         <div
           key={step.label}
-          className={`timeline-item${step.active ? " is-active" : ""}`}
+          className={`timeline-item${step.active ? " is-active" : ""}${
+            step.tone === "failed" ? " is-failed" : ""
+          }`}
         >
           <span className="timeline-dot" />
           <div className="timeline-copy">
@@ -730,6 +1138,35 @@ function OrderTimeline({ order }: { order: OrderRecord }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function FailureCallout({
+  failure,
+  compact = false,
+}: {
+  failure?: FailureDetails | null;
+  compact?: boolean;
+}) {
+  if (!failure) {
+    return null;
+  }
+
+  return (
+    <div className="callout callout-error">
+      <strong>
+        {failure.code} • {failure.component}
+      </strong>
+      <p>{failure.message}</p>
+      {!compact ? (
+        <>
+          <p>
+            {failure.retryable ? "Retryable" : "Needs operator fix"} • {failure.category}
+          </p>
+          {failure.recommended_action ? <p>{failure.recommended_action}</p> : null}
+        </>
+      ) : null}
     </div>
   );
 }
@@ -752,14 +1189,10 @@ function canCancel(status: OrderRecord["status"]): boolean {
   ].includes(status);
 }
 
-function formatTimestamp(raw: string | undefined): string {
-  if (!raw) {
-    return "--";
+function formatSymbolList(symbols: string[]): string {
+  if (symbols.length === 0) {
+    return "none";
   }
 
-  try {
-    return new Date(raw).toLocaleString();
-  } catch {
-    return raw;
-  }
+  return symbols.join(", ");
 }

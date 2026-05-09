@@ -5,6 +5,7 @@ from enum import Enum
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
+from backend.app.schemas.analysis import FailureDetails
 
 
 class BrokerName(str, Enum):
@@ -101,6 +102,7 @@ class OrderRecord(BaseModel):
     broker_status_raw: str | None = None
     status: OrderStatus
     status_reason: str | None = None
+    failure_details: FailureDetails | None = None
     approval_required: bool
     replaces_order_id: str | None = None
     replaced_by_order_id: str | None = None
@@ -127,3 +129,5 @@ class BrokerSyncResult(BaseModel):
     cash_diff: float = 0.0
     equity_diff: float = 0.0
     requires_operator_review: bool = False
+    summary_message: str | None = None
+    failure_details: FailureDetails | None = None

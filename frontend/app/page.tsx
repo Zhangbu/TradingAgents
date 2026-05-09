@@ -26,7 +26,7 @@ export default function HomePage() {
     >
       <section className="hero">
         <span className="eyebrow">TradingAgents Platform</span>
-        <h1>Research, paper execution, and operator controls in one cockpit.</h1>
+        <h1 className="hero-title-tight">Research, execution, and control in one terminal.</h1>
         <p>
           The platform has moved past scaffolding. Alpaca paper is now wired end to
           end, and the frontend is evolving into an operator console that can launch,

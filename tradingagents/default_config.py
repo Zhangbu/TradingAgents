@@ -13,7 +13,21 @@ _PROVIDER_DEFAULTS = {
         "quick_think_llm": "deepseek-chat",
         "backend_url": "https://api.deepseek.com",
     },
+    "nvidia": {
+        "deep_think_llm": "meta/llama-3.3-70b-instruct",
+        "quick_think_llm": "meta/llama-3.1-8b-instruct",
+        "backend_url": "https://integrate.api.nvidia.com/v1",
+    },
 }
+
+
+def _default_data_vendors() -> dict:
+    return {
+        "core_stock_apis": os.getenv("TRADINGAGENTS_CORE_STOCK_VENDOR", "yfinance"),
+        "technical_indicators": os.getenv("TRADINGAGENTS_TECHNICAL_VENDOR", "yfinance"),
+        "fundamental_data": os.getenv("TRADINGAGENTS_FUNDAMENTAL_VENDOR", "yfinance"),
+        "news_data": os.getenv("TRADINGAGENTS_NEWS_VENDOR", "yfinance"),
+    }
 
 
 def build_default_config() -> dict:
@@ -51,12 +65,7 @@ def build_default_config() -> dict:
         "max_recur_limit": 100,
         # Data vendor configuration
         # Category-level configuration (default for all tools in category)
-        "data_vendors": {
-            "core_stock_apis": "yfinance",       # Options: alpha_vantage, yfinance
-            "technical_indicators": "yfinance",  # Options: alpha_vantage, yfinance
-            "fundamental_data": "yfinance",      # Options: alpha_vantage, yfinance
-            "news_data": "yfinance",             # Options: alpha_vantage, yfinance
-        },
+        "data_vendors": _default_data_vendors(),
         # Tool-level configuration (takes precedence over category-level)
         "tool_vendors": {
             # Example: "get_stock_data": "alpha_vantage",  # Override category default

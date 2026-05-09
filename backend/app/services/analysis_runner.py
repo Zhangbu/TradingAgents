@@ -30,6 +30,11 @@ class TradingAgentsAnalysisRunner:
             config["max_debate_rounds"] = request.max_debate_rounds
         if request.max_risk_discuss_rounds is not None:
             config["max_risk_discuss_rounds"] = request.max_risk_discuss_rounds
+        if request.data_vendors:
+            config["data_vendors"] = {
+                **config.get("data_vendors", {}),
+                **request.data_vendors,
+            }
 
         graph = TradingAgentsGraph(
             selected_analysts=request.selected_analysts,

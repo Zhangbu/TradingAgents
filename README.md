@@ -141,6 +141,7 @@ export GOOGLE_API_KEY=...          # Google (Gemini)
 export ANTHROPIC_API_KEY=...       # Anthropic (Claude)
 export XAI_API_KEY=...             # xAI (Grok)
 export DEEPSEEK_API_KEY=...        # DeepSeek
+export NVIDIA_API_KEY=...          # NVIDIA NIM / API Catalog
 export DASHSCOPE_API_KEY=...       # Qwen (Alibaba DashScope)
 export ZHIPU_API_KEY=...           # GLM (Zhipu)
 export OPENROUTER_API_KEY=...      # OpenRouter
@@ -218,6 +219,51 @@ TRADINGAGENTS_QUICK_THINK_LLM=deepseek-chat
 DEEPSEEK_API_KEY=...
 ```
 
+For a self-hosted cloud deployment, enable the operator login gate before exposing the app:
+
+```bash
+TRADINGAGENTS_AUTH_ENABLED=true
+TRADINGAGENTS_AUTH_USERNAME=operator
+TRADINGAGENTS_AUTH_PASSWORD=use-a-long-random-password
+TRADINGAGENTS_AUTH_SECRET=use-a-long-random-session-secret
+TRADINGAGENTS_AUTH_SESSION_TTL_HOURS=24
+TRADINGAGENTS_AUTH_COOKIE_SECURE=true
+```
+
+And in `frontend/.env.local` or your deployment environment:
+
+```bash
+NEXT_PUBLIC_AUTH_ENABLED=true
+NEXT_PUBLIC_API_BASE_URL=https://your-domain.example/api
+```
+
+For internet-facing testing, also keep these deployment rules:
+
+- expose only `80/443` through the Tencent Cloud security group
+- do not expose raw `8000` or `3000` directly
+- place a reverse proxy such as Nginx in front of the frontend and backend
+- keep HTTPS enabled so the auth cookie can stay `Secure`
+
+For an NVIDIA-hosted NIM/API Catalog setup, use the OpenAI-compatible endpoint:
+
+```bash
+TRADINGAGENTS_LLM_PROVIDER=nvidia
+TRADINGAGENTS_DEEP_THINK_LLM=meta/llama-3.3-70b-instruct
+TRADINGAGENTS_QUICK_THINK_LLM=meta/llama-3.1-8b-instruct
+TRADINGAGENTS_LLM_BACKEND_URL=https://integrate.api.nvidia.com/v1
+NVIDIA_API_KEY=...
+```
+
+If the local Yahoo Finance stack is unstable on your machine, you can switch the analysis data layer away from `yfinance`:
+
+```bash
+ALPHA_VANTAGE_API_KEY=...
+TRADINGAGENTS_CORE_STOCK_VENDOR=alpha_vantage
+TRADINGAGENTS_TECHNICAL_VENDOR=alpha_vantage
+TRADINGAGENTS_FUNDAMENTAL_VENDOR=alpha_vantage
+TRADINGAGENTS_NEWS_VENDOR=alpha_vantage
+```
+
 For the frontend API base URL:
 
 ```bash
@@ -243,6 +289,29 @@ The helper script below prints both commands if you want a quick reminder:
 ```bash
 ./scripts/run_dev.sh
 ```
+
+Optional local self-check before launch:
+
+```bash
+python ./scripts/check_platform_env.py
+```
+
+### Platform Notes
+
+- If you use `DeepSeek`, set `TRADINGAGENTS_LLM_PROVIDER=deepseek` and provide `DEEPSEEK_API_KEY` in the root `.env`.
+- If analysis fails with a `curl: (35) TLS connect error` in the Yahoo Finance layer, refresh the environment with the repo-pinned dependency set:
+
+```bash
+pip install -e .
+```
+
+  This repo now pins `yfinance` below the newer `curl_cffi`-heavy builds to avoid a common WSL/conda TLS mismatch.
+
+Useful diagnostics:
+
+- `GET /api/analysis/runtime-profile`
+- `GET /api/analysis/runtime-health`
+- `GET /api/diagnostics/preflight`
 
 ### Platform Pages
 

@@ -15,6 +15,7 @@ from backend.app.schemas.order import (
     OrderType,
 )
 from backend.app.schemas.analysis import PlatformMode
+from backend.app.schemas.analysis import FailureDetails
 from backend.app.schemas.trade_intent import TradeIntentRecord, TradeIntentStatus
 from backend.app.services.order_repository import OrderRepository
 from backend.app.services.trade_intent_repository import TradeIntentRepository
@@ -193,6 +194,18 @@ class ExecutionService:
             failed = order.model_copy(deep=True)
             failed.status = OrderStatus.failed
             failed.status_reason = f"Broker submission failed: {exc}"
+            failed.failure_details = self._build_failure_details(
+                code="broker_submission_failed",
+                component="broker_execution",
+                category="broker",
+                retryable=True,
+                message=failed.status_reason,
+                recommended_action=(
+                    "Verify broker connectivity and credentials, then retry the order "
+                    "or switch back to manual review."
+                ),
+                raw_message=str(exc),
+            )
             failed.last_synced_at = datetime.now(timezone.utc)
             failed.updated_at = datetime.now(timezone.utc)
             self._record_broker_failure(failed.status_reason)
@@ -246,3 +259,24 @@ class ExecutionService:
         if self.automation_control_service is None:
             return
         self.automation_control_service.record_broker_success()
+
+    def _build_failure_details(
+        self,
+        *,
+        code: str,
+        component: str,
+        category: str,
+        retryable: bool,
+        message: str,
+        recommended_action: str,
+        raw_message: str,
+    ) -> FailureDetails:
+        return FailureDetails(
+            code=code,
+            component=component,
+            category=category,
+            retryable=retryable,
+            message=message,
+            recommended_action=recommended_action,
+            raw_message=raw_message,
+        )

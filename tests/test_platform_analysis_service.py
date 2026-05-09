@@ -27,6 +27,14 @@ class FailingRunner:
         raise RuntimeError(f"runner failed for {request.symbol}")
 
 
+class CurlTlsFailingRunner:
+    def run(self, request: AnalysisRequest) -> AnalysisExecutionResult:
+        raise RuntimeError(
+            "Failed to perform, curl: (35) TLS connect error: "
+            "error:00000000:invalid library (0):OPENSSL_internal:invalid library (0)."
+        )
+
+
 class AnalysisServiceTest(unittest.TestCase):
     def test_create_run_marks_completed_when_runner_succeeds(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -51,6 +59,21 @@ class AnalysisServiceTest(unittest.TestCase):
 
             self.assertEqual(record.status, AnalysisStatus.failed)
             self.assertIn("runner failed", record.error_message or "")
+            self.assertEqual(record.failure_details.code, "analysis_unknown")
+
+    def test_create_run_maps_curl_tls_errors_to_actionable_message(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repository = AnalysisRepository(Path(tmp_dir))
+            service = AnalysisService(repository=repository, runner=CurlTlsFailingRunner())
+            request = AnalysisRequest(symbol="nvda")
+
+            record = service.create_run(request)
+
+            self.assertEqual(record.status, AnalysisStatus.failed)
+            self.assertIn("Yahoo Finance layer", record.error_message or "")
+            self.assertIn("yfinance", record.error_message or "")
+            self.assertEqual(record.failure_details.code, "market_data_tls")
+            self.assertEqual(record.failure_details.component, "market_data")
 
 
 if __name__ == "__main__":

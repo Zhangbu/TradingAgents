@@ -1,5 +1,10 @@
+"use client";
+
 import Link from "next/link";
-import { ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { ReactNode, useEffect, useState } from "react";
+
+import { apiRequest, authEnabled } from "../lib/api";
 
 const navItems = [
   { href: "/", label: "Dashboard" },
@@ -9,6 +14,12 @@ const navItems = [
   { href: "/settings", label: "Settings" },
   { href: "/backtesting", label: "Backtesting" },
 ];
+
+type SessionResponse = {
+  auth_enabled: boolean;
+  authenticated: boolean;
+  username?: string | null;
+};
 
 export function TerminalShell({
   activeHref,
@@ -21,6 +32,62 @@ export function TerminalShell({
   subtitle: string;
   children: ReactNode;
 }) {
+  const router = useRouter();
+  const [session, setSession] = useState<SessionResponse | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSession() {
+      if (!authEnabled) {
+        setSession({ auth_enabled: false, authenticated: true, username: "operator" });
+        return;
+      }
+
+      try {
+        const nextSession = await apiRequest<SessionResponse>("/auth/session");
+        if (cancelled) {
+          return;
+        }
+        setSession(nextSession);
+        if (!nextSession.authenticated) {
+          router.replace("/login");
+        }
+      } catch {
+        if (!cancelled) {
+          router.replace("/login");
+        }
+      }
+    }
+
+    void loadSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  async function logout() {
+    setLoggingOut(true);
+    try {
+      await apiRequest("/auth/logout", { method: "POST" });
+    } finally {
+      router.replace("/login");
+    }
+  }
+
+  if (authEnabled && session === null) {
+    return (
+      <main className="auth-shell">
+        <div className="auth-card">
+          <span className="eyebrow">Session check</span>
+          <h1>Validating operator access…</h1>
+          <p>Hold on while the terminal confirms your authenticated session.</p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="terminal-shell">
       <aside className="terminal-sidebar">
@@ -40,12 +107,6 @@ export function TerminalShell({
             </Link>
           ))}
         </nav>
-
-        <div className="sidebar-card">
-          <p className="sidebar-label">Operator</p>
-          <strong>Trader #042</strong>
-          <p className="muted">Paper mode operator console</p>
-        </div>
       </aside>
 
       <section className="terminal-main">
@@ -58,6 +119,24 @@ export function TerminalShell({
             <span>Broker: Alpaca</span>
             <span className="meta-separator" />
             <span>Paper workflow</span>
+            {session?.username ? (
+              <>
+                <span className="meta-separator" />
+                <span>Operator: {session.username}</span>
+              </>
+            ) : null}
+            {authEnabled ? (
+              <button
+                type="button"
+                className="topbar-logout"
+                onClick={() => {
+                  void logout();
+                }}
+                disabled={loggingOut}
+              >
+                {loggingOut ? "Signing out..." : "Sign out"}
+              </button>
+            ) : null}
           </div>
         </header>
 

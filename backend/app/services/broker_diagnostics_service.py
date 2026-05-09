@@ -83,7 +83,7 @@ class BrokerDiagnosticsService:
         if not automation_health.broker_sync_healthy:
             checklist.append("Restore broker sync health before using paper execution.")
         if automation_health.broker_sync_stale:
-            checklist.append("Record a fresh broker sync before using paper execution.")
+            checklist.append("Record a fresh broker sync for a more up-to-date broker snapshot.")
         if not automation_health.auto_trading_enabled:
             checklist.append("Enable auto trading if you want the paper_auto flow to submit automatically.")
 
@@ -91,7 +91,6 @@ class BrokerDiagnosticsService:
             broker_health.connectivity_ok
             and not automation_health.kill_switch_active
             and automation_health.broker_sync_healthy
-            and not automation_health.broker_sync_stale
         )
         auto_ready = manual_ready and automation_health.effective_auto_trading_enabled
 

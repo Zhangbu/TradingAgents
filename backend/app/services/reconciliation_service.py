@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from backend.app.schemas.analysis import FailureDetails
 from backend.app.schemas.audit import AuditEventType
 from backend.app.schemas.order import BrokerSyncResult, OrderStatus
 from backend.app.services.audit_log_service import AuditLogService
@@ -33,7 +34,23 @@ class ReconciliationService:
             self.order_repository.save(synced)
             snapshot = self.broker_adapter.get_account_snapshot()
         except Exception as exc:
-            self._mark_sync_failure(f"Broker sync failed: {exc}")
+            failure_details = self._build_failure_details(
+                code="broker_sync_failed",
+                component="reconciliation",
+                category="broker",
+                retryable=True,
+                message=f"Broker sync failed: {exc}",
+                recommended_action=(
+                    "Retry sync after checking broker connectivity, then review the "
+                    "order trail if the failure persists."
+                ),
+                raw_message=str(exc),
+            )
+            failed_order = order.model_copy(deep=True)
+            failed_order.failure_details = failure_details
+            failed_order.status_reason = failure_details.message
+            self.order_repository.save(failed_order)
+            self._mark_sync_failure(failure_details.message)
             raise ValueError(f"Broker sync failed: {exc}") from exc
 
         result = BrokerSyncResult(
@@ -44,7 +61,11 @@ class ReconciliationService:
             unmatched_broker_symbols=self._find_unmatched_broker_symbols(snapshot),
             cash_diff=0.0,
             equity_diff=0.0,
-            requires_operator_review=bool(self._find_unmatched_local_symbols(snapshot) or self._find_unmatched_broker_symbols(snapshot)),
+            requires_operator_review=bool(
+                self._find_unmatched_local_symbols(snapshot)
+                or self._find_unmatched_broker_symbols(snapshot)
+            ),
+            summary_message=self._build_summary_message(snapshot),
         )
         self._mark_sync_success()
         self._log_sync_events(order_id=order_id, result=result)
@@ -79,7 +100,11 @@ class ReconciliationService:
             unmatched_broker_symbols=self._find_unmatched_broker_symbols(snapshot),
             cash_diff=0.0,
             equity_diff=0.0,
-            requires_operator_review=bool(self._find_unmatched_local_symbols(snapshot) or self._find_unmatched_broker_symbols(snapshot)),
+            requires_operator_review=bool(
+                self._find_unmatched_local_symbols(snapshot)
+                or self._find_unmatched_broker_symbols(snapshot)
+            ),
+            summary_message=self._build_summary_message(snapshot),
         )
         self._mark_sync_success()
         self._log_sync_events(order_id="all", result=result)
@@ -103,6 +128,37 @@ class ReconciliationService:
         if self.automation_control_service is not None:
             self.automation_control_service.record_broker_sync()
             self.automation_control_service.record_broker_success()
+
+    def _build_summary_message(self, snapshot) -> str:
+        unmatched_local = self._find_unmatched_local_symbols(snapshot)
+        unmatched_broker = self._find_unmatched_broker_symbols(snapshot)
+        if unmatched_local or unmatched_broker:
+            return (
+                "Reconciliation completed with mismatches. Review unmatched local and "
+                "broker symbols before trusting the account state."
+            )
+        return "Reconciliation completed without symbol mismatches."
+
+    def _build_failure_details(
+        self,
+        *,
+        code: str,
+        component: str,
+        category: str,
+        retryable: bool,
+        message: str,
+        recommended_action: str,
+        raw_message: str,
+    ) -> FailureDetails:
+        return FailureDetails(
+            code=code,
+            component=component,
+            category=category,
+            retryable=retryable,
+            message=message,
+            recommended_action=recommended_action,
+            raw_message=raw_message,
+        )
 
     def _log_sync_events(self, *, order_id: str, result: BrokerSyncResult) -> None:
         if self.audit_log_service is None:

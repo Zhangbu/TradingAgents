@@ -22,7 +22,7 @@ from .alpha_vantage import (
     get_news as get_alpha_vantage_news,
     get_global_news as get_alpha_vantage_global_news,
 )
-from .alpha_vantage_common import AlphaVantageRateLimitError
+from .alpha_vantage_common import AlphaVantagePremiumEndpointError, AlphaVantageRateLimitError
 
 # Configuration and routing logic
 from .config import get_config
@@ -140,12 +140,10 @@ def route_to_vendor(method: str, *args, **kwargs):
     if method not in VENDOR_METHODS:
         raise ValueError(f"Method '{method}' not supported")
 
-    # Build fallback chain: primary vendors first, then remaining available vendors
-    all_available_vendors = list(VENDOR_METHODS[method].keys())
+    # Only use implicit fallback when the config explicitly lists multiple vendors.
+    # A single configured vendor should remain authoritative so operator intent is
+    # preserved and debugging stays predictable.
     fallback_vendors = primary_vendors.copy()
-    for vendor in all_available_vendors:
-        if vendor not in fallback_vendors:
-            fallback_vendors.append(vendor)
 
     for vendor in fallback_vendors:
         if vendor not in VENDOR_METHODS[method]:
@@ -156,7 +154,9 @@ def route_to_vendor(method: str, *args, **kwargs):
 
         try:
             return impl_func(*args, **kwargs)
-        except AlphaVantageRateLimitError:
-            continue  # Only rate limits trigger fallback
+        except (AlphaVantageRateLimitError, AlphaVantagePremiumEndpointError):
+            if len(fallback_vendors) > 1:
+                continue
+            raise
 
     raise RuntimeError(f"No available vendor for '{method}'")

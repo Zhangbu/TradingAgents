@@ -39,6 +39,11 @@ class AlphaVantageRateLimitError(Exception):
     """Exception raised when Alpha Vantage API rate limit is exceeded."""
     pass
 
+
+class AlphaVantagePremiumEndpointError(Exception):
+    """Exception raised when Alpha Vantage returns a premium-endpoint message."""
+    pass
+
 def _make_api_request(function_name: str, params: dict) -> dict | str:
     """Helper function to make API requests and handle responses.
     
@@ -74,8 +79,18 @@ def _make_api_request(function_name: str, params: dict) -> dict | str:
         # Check for rate limit error
         if "Information" in response_json:
             info_message = response_json["Information"]
-            if "rate limit" in info_message.lower() or "api key" in info_message.lower():
+            normalized_message = info_message.lower()
+            if "premium endpoint" in normalized_message or "premium plans" in normalized_message:
+                raise AlphaVantagePremiumEndpointError(
+                    f"Alpha Vantage rejected the request because this endpoint requires a premium plan: {info_message}"
+                )
+            if "rate limit" in normalized_message or "our standard api rate limit" in normalized_message:
                 raise AlphaVantageRateLimitError(f"Alpha Vantage rate limit exceeded: {info_message}")
+            if "api key" in normalized_message:
+                raise ValueError(f"Alpha Vantage API key issue: {info_message}")
+            raise ValueError(
+                f"Alpha Vantage returned an informational response instead of data: {info_message}"
+            )
     except json.JSONDecodeError:
         # Response is not JSON (likely CSV data), which is normal
         pass
@@ -105,7 +120,11 @@ def _filter_csv_by_date_range(csv_data: str, start_date: str, end_date: str) -> 
 
         # Assume the first column is the date column (timestamp)
         date_col = df.columns[0]
-        df[date_col] = pd.to_datetime(df[date_col])
+        if str(date_col).strip().lower() not in {"timestamp", "date"}:
+            raise ValueError(
+                f"Unexpected Alpha Vantage CSV schema. Expected a timestamp/date column, got '{date_col}'."
+            )
+        df[date_col] = pd.to_datetime(df[date_col], format="mixed")
 
         # Filter by date range
         start_dt = pd.to_datetime(start_date)

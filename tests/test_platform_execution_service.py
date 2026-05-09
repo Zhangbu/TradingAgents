@@ -92,6 +92,8 @@ class ExecutionServiceTest(unittest.TestCase):
 
             self.assertEqual(order.status, OrderStatus.failed)
             self.assertIn("alpaca unavailable", order.status_reason or "")
+            self.assertEqual(order.failure_details.code, "broker_submission_failed")
+            self.assertEqual(order.failure_details.component, "broker_execution")
 
     def test_manual_order_requires_approval_before_fill(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

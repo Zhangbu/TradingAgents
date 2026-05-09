@@ -1,6 +1,6 @@
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from backend.app.schemas.analysis import PlatformMode
@@ -52,6 +52,38 @@ def build_intent(**overrides) -> TradeIntentRecord:
 
 
 class ExecutionGuardrailsTest(unittest.TestCase):
+    def test_manual_order_allowed_when_sync_is_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            intent_repository = TradeIntentRepository(base / "intents")
+            order_repository = OrderRepository(base / "orders")
+            automation_service = AutomationControlService(
+                AutomationStateRepository(base / "automation" / "state.json")
+            )
+            stale_time = datetime.now(timezone.utc) - timedelta(hours=1)
+            automation_service.record_broker_sync(stale_time)
+            broker_adapter = AlpacaPaperBrokerAdapter(BrokerStateRepository(base / "paper" / "state.json"))
+            service = ExecutionService(
+                intent_repository,
+                order_repository,
+                broker_adapter,
+                automation_control_service=automation_service,
+            )
+
+            intent = build_intent(mode=PlatformMode.paper_manual, status=TradeIntentStatus.approval_required)
+            intent_repository.save(intent)
+
+            order = service.create_order(
+                OrderCreateRequest(
+                    intent_id=intent.id,
+                    broker_name=BrokerName.alpaca,
+                    broker_environment=BrokerEnvironment.paper,
+                    reference_price=100,
+                )
+            )
+
+            self.assertEqual(order.status.value, "pending_approval")
+
     def test_auto_order_blocked_when_auto_trading_disabled(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             base = Path(tmp_dir)
@@ -73,6 +105,38 @@ class ExecutionGuardrailsTest(unittest.TestCase):
             intent_repository.save(intent)
 
             with self.assertRaisesRegex(ValueError, "auto trading is disabled"):
+                service.create_order(
+                    OrderCreateRequest(
+                        intent_id=intent.id,
+                        broker_name=BrokerName.alpaca,
+                        broker_environment=BrokerEnvironment.paper,
+                        reference_price=100,
+                    )
+                )
+
+    def test_auto_order_blocked_when_sync_is_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            intent_repository = TradeIntentRepository(base / "intents")
+            order_repository = OrderRepository(base / "orders")
+            automation_service = AutomationControlService(
+                AutomationStateRepository(base / "automation" / "state.json")
+            )
+            automation_service.set_auto_trading(True)
+            stale_time = datetime.now(timezone.utc) - timedelta(hours=1)
+            automation_service.record_broker_sync(stale_time)
+            broker_adapter = AlpacaPaperBrokerAdapter(BrokerStateRepository(base / "paper" / "state.json"))
+            service = ExecutionService(
+                intent_repository,
+                order_repository,
+                broker_adapter,
+                automation_control_service=automation_service,
+            )
+
+            intent = build_intent()
+            intent_repository.save(intent)
+
+            with self.assertRaisesRegex(ValueError, "broker sync is stale"):
                 service.create_order(
                     OrderCreateRequest(
                         intent_id=intent.id,

@@ -74,6 +74,20 @@ MODEL_OPTIONS: ProviderModeOptions = {
             ("Custom model ID", "custom"),
         ],
     },
+    "nvidia": {
+        "quick": [
+            ("Meta Llama 3.1 8B Instruct", "meta/llama-3.1-8b-instruct"),
+            ("Z.ai GLM 4.7", "z-ai/glm4.7"),
+            ("OpenAI GPT-OSS 20B", "openai/gpt-oss-20b"),
+            ("Custom model ID", "custom"),
+        ],
+        "deep": [
+            ("Meta Llama 3.3 70B Instruct", "meta/llama-3.3-70b-instruct"),
+            ("NVIDIA Llama 3.1 Nemotron Ultra 253B", "nvidia/llama-3.1-nemotron-ultra-253b-v1"),
+            ("Z.ai GLM 5.1", "z-ai/glm5.1"),
+            ("Custom model ID", "custom"),
+        ],
+    },
     "qwen": {
         "quick": [
             ("Qwen 3.5 Flash", "qwen3.5-flash"),

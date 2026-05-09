@@ -8,6 +8,8 @@ from backend.app.services.brokers.alpaca_api import AlpacaApiPaperBrokerAdapter
 class FakeResponse:
     def __init__(self, payload):
         self._payload = payload
+        self.status_code = 200
+        self.text = ""
 
     def raise_for_status(self):
         return None
@@ -67,6 +69,11 @@ class FakeSession:
         if method == "DELETE" and url.endswith("/orders/broker-order-1"):
             return FakeResponse(None)
         raise AssertionError(f"Unexpected request: {method} {url}")
+
+
+class FailingSession:
+    def request(self, method, url, headers=None, timeout=None, **kwargs):
+        raise RuntimeError("TLS connect error")
 
 
 class AlpacaApiPaperBrokerAdapterTest(unittest.TestCase):
@@ -157,6 +164,18 @@ class AlpacaApiPaperBrokerAdapterTest(unittest.TestCase):
 
         self.assertEqual(canceled.status, OrderStatus.canceled)
         self.assertIsNotNone(canceled.canceled_at)
+
+    def test_get_account_snapshot_surfaces_transport_error_as_value_error(self):
+        config = AlpacaBrokerConfig(
+            enabled=True,
+            paper_trading_mode="api",
+            api_key="key",
+            secret_key="secret",
+        )
+        adapter = AlpacaApiPaperBrokerAdapter(config=config, session=FailingSession())
+
+        with self.assertRaisesRegex(ValueError, "TLS/SSL setup"):
+            adapter.get_account_snapshot()
 
 
 if __name__ == "__main__":

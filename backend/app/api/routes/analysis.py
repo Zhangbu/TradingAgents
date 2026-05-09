@@ -4,7 +4,13 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.app.core.config import get_settings
 from backend.app.schemas.analysis import AnalysisRequest, AnalysisRunListResponse, AnalysisRunRecord
+from backend.app.schemas.runtime import (
+    AnalysisRuntimeCatalog,
+    AnalysisRuntimeHealth,
+    AnalysisRuntimeProfile,
+)
 from backend.app.services.analysis_repository import AnalysisRepository
+from backend.app.services.analysis_runtime_service import AnalysisRuntimeService
 from backend.app.services.analysis_service import AnalysisService
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
@@ -16,9 +22,28 @@ def get_analysis_service() -> AnalysisService:
     return AnalysisService(repository=repository)
 
 
+def get_analysis_runtime_service() -> AnalysisRuntimeService:
+    return AnalysisRuntimeService()
+
+
 @router.post("/runs", response_model=AnalysisRunRecord)
 def create_analysis_run(request: AnalysisRequest) -> AnalysisRunRecord:
     return get_analysis_service().create_run(request)
+
+
+@router.get("/runtime-profile", response_model=AnalysisRuntimeProfile)
+def get_analysis_runtime_profile() -> AnalysisRuntimeProfile:
+    return get_analysis_runtime_service().get_profile()
+
+
+@router.get("/runtime-health", response_model=AnalysisRuntimeHealth)
+def get_analysis_runtime_health() -> AnalysisRuntimeHealth:
+    return get_analysis_runtime_service().get_health()
+
+
+@router.get("/runtime-catalog", response_model=AnalysisRuntimeCatalog)
+def get_analysis_runtime_catalog() -> AnalysisRuntimeCatalog:
+    return get_analysis_runtime_service().get_catalog()
 
 
 @router.get("/runs", response_model=AnalysisRunListResponse)

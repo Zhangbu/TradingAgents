@@ -36,6 +36,15 @@ class Settings:
         self.app_name = "TradingAgents Platform API"
         self.api_prefix = "/api"
         self.environment = os.getenv("TRADINGAGENTS_PLATFORM_ENV", "development")
+        self.auth_enabled = os.getenv("TRADINGAGENTS_AUTH_ENABLED", "false").lower() == "true"
+        self.auth_username = os.getenv("TRADINGAGENTS_AUTH_USERNAME", "operator")
+        self.auth_password = os.getenv("TRADINGAGENTS_AUTH_PASSWORD")
+        self.auth_secret = os.getenv("TRADINGAGENTS_AUTH_SECRET")
+        self.auth_session_ttl_hours = int(os.getenv("TRADINGAGENTS_AUTH_SESSION_TTL_HOURS", "24"))
+        self.auth_cookie_secure = os.getenv(
+            "TRADINGAGENTS_AUTH_COOKIE_SECURE",
+            "true" if self.environment != "development" else "false",
+        ).lower() == "true"
         self.frontend_origin = os.getenv("TRADINGAGENTS_FRONTEND_ORIGIN", "http://localhost:3000")
         raw_cors_origins = os.getenv(
             "TRADINGAGENTS_PLATFORM_CORS_ORIGINS",

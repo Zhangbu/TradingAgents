@@ -23,6 +23,7 @@ export interface AnalysisRequest {
   llm_provider?: string;
   deep_think_llm?: string;
   quick_think_llm?: string;
+  data_vendors?: Record<string, string>;
   max_debate_rounds?: number;
   max_risk_discuss_rounds?: number;
   mode: PlatformMode;
@@ -51,8 +52,20 @@ export interface AnalysisRunRecord {
   llm_provider?: string;
   deep_think_llm?: string;
   quick_think_llm?: string;
+  data_vendors?: Record<string, string>;
   error_message?: string;
+  failure_details?: FailureDetails;
   artifacts?: AnalysisArtifacts;
+}
+
+export interface FailureDetails {
+  code: string;
+  component: string;
+  category: string;
+  retryable: boolean;
+  message: string;
+  recommended_action?: string;
+  raw_message?: string;
 }
 
 export type TradeRating = "BUY" | "OVERWEIGHT" | "HOLD" | "UNDERWEIGHT" | "SELL";
@@ -125,12 +138,16 @@ export interface OrderRecord {
     | "expired"
     | "failed";
   status_reason?: string;
+  failure_details?: FailureDetails;
   approval_required: boolean;
   cancel_requested_at?: string;
   canceled_at?: string;
   submitted_at?: string;
   filled_at?: string;
   last_synced_at?: string;
+  created_at?: string;
+  updated_at?: string;
+  broker_updated_at?: string;
 }
 
 export interface AccountSnapshot {
@@ -143,6 +160,24 @@ export interface AccountSnapshot {
     average_price: number;
     market_value: number;
   }>;
+}
+
+export interface BrokerSyncResult {
+  synced_orders: OrderRecord[];
+  account_snapshot?: AccountSnapshot | null;
+  matched_positions: Array<{
+    symbol: string;
+    quantity: number;
+    average_price: number;
+    market_value: number;
+  }>;
+  unmatched_local_symbols: string[];
+  unmatched_broker_symbols: string[];
+  cash_diff: number;
+  equity_diff: number;
+  requires_operator_review: boolean;
+  summary_message?: string;
+  failure_details?: FailureDetails | null;
 }
 
 export interface AutomationState {
@@ -198,6 +233,75 @@ export interface AlpacaPaperReadiness {
   checklist: string[];
 }
 
+export type RuntimeHealthState = "healthy" | "warning" | "blocked";
+
+export interface AnalysisRuntimeProfile {
+  llm_provider: string;
+  deep_think_llm: string;
+  quick_think_llm: string;
+  backend_url?: string;
+  data_vendors: Record<string, string>;
+  vendor_fallback_policy: string;
+  api_keys_present: Record<string, boolean>;
+}
+
+export interface RuntimeModelOption {
+  label: string;
+  value: string;
+}
+
+export interface RuntimeProviderCatalog {
+  provider: string;
+  backend_url?: string;
+  api_key_env?: string;
+  quick_models: RuntimeModelOption[];
+  deep_models: RuntimeModelOption[];
+}
+
+export interface RuntimeDataVendorCategory {
+  category: string;
+  label: string;
+  current_vendor: string;
+  options: string[];
+}
+
+export interface AnalysisRuntimeCatalog {
+  providers: Record<string, RuntimeProviderCatalog>;
+  data_vendor_categories: RuntimeDataVendorCategory[];
+  known_data_vendors: string[];
+  vendor_fallback_policy: string;
+}
+
+export interface RuntimeHealthCheck {
+  component: string;
+  state: RuntimeHealthState;
+  configured: boolean;
+  healthy: boolean;
+  message: string;
+  recommended_action?: string;
+}
+
+export interface AnalysisRuntimeHealth {
+  profile: AnalysisRuntimeProfile;
+  llm: RuntimeHealthCheck;
+  market_data: RuntimeHealthCheck;
+}
+
+export interface WorkflowPreflight {
+  workflow: string;
+  ready: boolean;
+  state: RuntimeHealthState;
+  checks: RuntimeHealthCheck[];
+  blocker_count: number;
+  warning_count: number;
+}
+
+export interface PlatformPreflightSummary {
+  analysis: WorkflowPreflight;
+  paper_manual: WorkflowPreflight;
+  paper_auto: WorkflowPreflight;
+}
+
 export type AuditEventType =
   | "trade_intent_created"
   | "risk_evaluated"
@@ -245,6 +349,9 @@ export const auditEndpointExample = "GET /api/audit";
 export const alpacaBrokerHealthEndpointExample = "GET /api/brokers/alpaca/health";
 export const alpacaBrokerConnectTestEndpointExample = "POST /api/brokers/alpaca/connect/test";
 export const alpacaPaperReadinessEndpointExample = "GET /api/brokers/alpaca/paper-readiness";
+export const analysisRuntimeProfileEndpointExample = "GET /api/analysis/runtime-profile";
+export const analysisRuntimeHealthEndpointExample = "GET /api/analysis/runtime-health";
+export const platformPreflightEndpointExample = "GET /api/diagnostics/preflight";
 
 export const sampleTradeIntent: TradeIntentRecord = {
   id: "intent_demo",

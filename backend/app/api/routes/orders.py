@@ -156,12 +156,18 @@ def list_orders(limit: int = Query(default=20, ge=1, le=200)) -> OrderListRespon
 
 @router.get("/accounts/paper", response_model=AccountSnapshot)
 def get_paper_account(broker_name: str = Query(default="alpaca")) -> AccountSnapshot:
-    return build_execution_service(broker_name=broker_name).get_account_snapshot()
+    try:
+        return build_execution_service(broker_name=broker_name).get_account_snapshot()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.post("/sync/all", response_model=BrokerSyncResult)
 def sync_all_orders(broker_name: str = Query(default="alpaca")) -> BrokerSyncResult:
-    return build_reconciliation_service(broker_name=broker_name).sync_all_orders()
+    try:
+        return build_reconciliation_service(broker_name=broker_name).sync_all_orders()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.post("/{order_id}/sync", response_model=BrokerSyncResult)

@@ -32,6 +32,7 @@ class AnalysisRequest(BaseModel):
     llm_provider: str | None = None
     deep_think_llm: str | None = None
     quick_think_llm: str | None = None
+    data_vendors: dict[str, str] | None = None
     max_debate_rounds: int | None = Field(default=None, ge=1, le=10)
     max_risk_discuss_rounds: int | None = Field(default=None, ge=1, le=10)
     mode: PlatformMode = PlatformMode.analysis_only
@@ -49,6 +50,16 @@ class AnalysisArtifacts(BaseModel):
     raw_state: dict[str, Any] | None = None
 
 
+class FailureDetails(BaseModel):
+    code: str
+    component: str
+    category: str
+    retryable: bool
+    message: str
+    recommended_action: str | None = None
+    raw_message: str | None = None
+
+
 class AnalysisRunRecord(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     symbol: str
@@ -61,7 +72,9 @@ class AnalysisRunRecord(BaseModel):
     llm_provider: str | None = None
     deep_think_llm: str | None = None
     quick_think_llm: str | None = None
+    data_vendors: dict[str, str] | None = None
     error_message: str | None = None
+    failure_details: FailureDetails | None = None
     artifacts: AnalysisArtifacts | None = None
 
 

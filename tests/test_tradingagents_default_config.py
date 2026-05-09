@@ -21,6 +21,21 @@ class TradingAgentsDefaultConfigTests(unittest.TestCase):
         self.assertEqual(config["quick_think_llm"], "deepseek-chat")
         self.assertEqual(config["backend_url"], "https://api.deepseek.com")
 
+    def test_uses_nvidia_defaults_from_environment(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRADINGAGENTS_LLM_PROVIDER": "nvidia",
+            },
+            clear=False,
+        ):
+            config = build_default_config()
+
+        self.assertEqual(config["llm_provider"], "nvidia")
+        self.assertEqual(config["deep_think_llm"], "meta/llama-3.3-70b-instruct")
+        self.assertEqual(config["quick_think_llm"], "meta/llama-3.1-8b-instruct")
+        self.assertEqual(config["backend_url"], "https://integrate.api.nvidia.com/v1")
+
     def test_model_overrides_take_precedence(self) -> None:
         with patch.dict(
             os.environ,
