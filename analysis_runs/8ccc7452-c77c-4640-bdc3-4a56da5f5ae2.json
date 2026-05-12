@@ -1,0 +1,35 @@
+{
+  "id": "8ccc7452-c77c-4640-bdc3-4a56da5f5ae2",
+  "symbol": "AAPL",
+  "trade_date": "2026-05-12",
+  "selected_analysts": [
+    "market",
+    "social",
+    "news",
+    "fundamentals"
+  ],
+  "mode": "paper_manual",
+  "status": "failed",
+  "created_at": "2026-05-12T06:19:13.507013Z",
+  "updated_at": "2026-05-12T06:19:36.677321Z",
+  "llm_provider": "nvidia",
+  "deep_think_llm": "z-ai/glm5.1",
+  "quick_think_llm": "z-ai/glm4.7",
+  "data_vendors": {
+    "core_stock_apis": "yfinance",
+    "technical_indicators": "yfinance",
+    "fundamental_data": "yfinance",
+    "news_data": "yfinance"
+  },
+  "error_message": "Market data fetch failed in the Yahoo Finance layer because the local curl/OpenSSL stack could not complete TLS setup. This usually comes from a newer yfinance + curl_cffi environment mismatch. Reinstall the project dependencies after pinning to the repo version, or switch the market data vendor away from yfinance before retrying.",
+  "failure_details": {
+    "code": "market_data_tls",
+    "component": "market_data",
+    "category": "configuration",
+    "retryable": false,
+    "message": "Market data fetch failed in the Yahoo Finance layer because the local curl/OpenSSL stack could not complete TLS setup. This usually comes from a newer yfinance + curl_cffi environment mismatch. Reinstall the project dependencies after pinning to the repo version, or switch the market data vendor away from yfinance before retrying.",
+    "recommended_action": "Prefer alpha_vantage for now, or reinstall the pinned yfinance stack before retrying.",
+    "raw_message": "Failed to perform, curl: (35) TLS connect error: error:00000000:invalid library (0):OPENSSL_internal:invalid library (0). See https://curl.se/libcurl/c/libcurl-errors.html first for more details."
+  },
+  "artifacts": null
+}

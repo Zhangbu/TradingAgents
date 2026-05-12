@@ -5,8 +5,11 @@ export default function AnalysisPage() {
   return (
     <TerminalShell
       activeHref="/analysis"
-      title="Market Analysis Terminal"
-      subtitle="Run TradingAgents analysis, generate structured trade intents, and decide whether an opportunity is ready to move into the trading workflow."
+      title={{ en: "Analysis", zh: "分析" }}
+      subtitle={{
+        en: "Run research, inspect the signal, and decide whether an opportunity is ready for paper execution.",
+        zh: "运行研究、查看信号，并判断一个机会是否适合进入模拟盘执行。",
+      }}
     >
       <AnalysisWorkspace />
     </TerminalShell>

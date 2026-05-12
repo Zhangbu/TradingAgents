@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { startTransition, useEffect, useState } from "react";
 
 import { apiRequest } from "../lib/api";
 import { formatTimestamp, formatWholeDollars } from "../lib/format";
+import { useUiLanguage } from "../shared/ui-language";
 import type {
   AccountSnapshot,
   AlpacaPaperReadiness,
@@ -17,7 +19,8 @@ import type {
 type DashboardState = {
   readiness: AlpacaPaperReadiness | null;
   preflight: PlatformPreflightSummary | null;
-  account: AccountSnapshot | null;
+  alpacaAccount: AccountSnapshot | null;
+  ibAccount: AccountSnapshot | null;
   orders: OrderRecord[];
   analyses: AnalysisRunRecord[];
   tradeIntents: TradeIntentRecord[];
@@ -27,7 +30,8 @@ type DashboardState = {
 const emptyState: DashboardState = {
   readiness: null,
   preflight: null,
-  account: null,
+  alpacaAccount: null,
+  ibAccount: null,
   orders: [],
   analyses: [],
   tradeIntents: [],
@@ -35,6 +39,7 @@ const emptyState: DashboardState = {
 };
 
 export function DashboardOverview() {
+  const { text } = useUiLanguage();
   const [state, setState] = useState<DashboardState>(emptyState);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,11 +53,12 @@ export function DashboardOverview() {
     setError(null);
 
     try {
-      const [readiness, preflight, account, orderResponse, analysisResponse, tradeIntentResponse, audit] =
+      const [readiness, preflight, alpacaAccount, ibAccount, orderResponse, analysisResponse, tradeIntentResponse, audit] =
         await Promise.all([
           apiRequest<AlpacaPaperReadiness>("/brokers/alpaca/paper-readiness"),
           apiRequest<PlatformPreflightSummary>("/diagnostics/preflight"),
           apiRequest<AccountSnapshot>("/orders/accounts/paper?broker_name=alpaca"),
+          apiRequest<AccountSnapshot>("/orders/accounts/paper?broker_name=interactive_brokers"),
           apiRequest<{ items: OrderRecord[] }>("/orders?limit=8"),
           apiRequest<{ items: AnalysisRunRecord[] }>("/analysis/runs?limit=6"),
           apiRequest<{ items: TradeIntentRecord[] }>("/trade-intents?limit=8"),
@@ -62,7 +68,8 @@ export function DashboardOverview() {
       setState({
         readiness,
         preflight,
-        account,
+        alpacaAccount,
+        ibAccount,
         orders: orderResponse.items,
         analyses: analysisResponse.items,
         tradeIntents: tradeIntentResponse.items,
@@ -75,6 +82,10 @@ export function DashboardOverview() {
     }
   }
 
+  const totalBuyingPower =
+    (state.alpacaAccount?.buying_power ?? 0) + (state.ibAccount?.buying_power ?? 0);
+  const totalPositions =
+    (state.alpacaAccount?.positions.length ?? 0) + (state.ibAccount?.positions.length ?? 0);
   const pendingApprovals = state.orders.filter(
     (order) => order.status === "pending_approval",
   ).length;
@@ -90,22 +101,22 @@ export function DashboardOverview() {
     <div className="stack">
       <section className="grid columns-4 dashboard-grid">
         <MetricCard
-          label="Buying Power"
-          value={formatWholeDollars(state.account?.buying_power)}
+          label={text({ en: "Buying Power", zh: "可用购买力" })}
+          value={formatWholeDollars(totalBuyingPower)}
           tone="positive"
         />
         <MetricCard
-          label="Open Positions"
-          value={String(state.account?.positions.length ?? 0)}
+          label={text({ en: "Open Positions", zh: "当前持仓" })}
+          value={String(totalPositions)}
         />
         <MetricCard
-          label="Pending Approval"
+          label={text({ en: "Pending Approval", zh: "待审批" })}
           value={String(pendingApprovals)}
           tone={pendingApprovals > 0 ? "warning" : "neutral"}
         />
         <MetricCard
-          label="Auto Flow"
-          value={state.preflight?.paper_auto.ready ? "Ready" : "Paused"}
+          label={text({ en: "Auto Flow", zh: "自动流程" })}
+          value={state.preflight?.paper_auto.ready ? text({ en: "Ready", zh: "可用" }) : text({ en: "Paused", zh: "暂停" })}
           tone={state.preflight?.paper_auto.ready ? "positive" : "warning"}
         />
       </section>
@@ -117,7 +128,7 @@ export function DashboardOverview() {
           <div className="section-heading">
             <div>
               <span className="eyebrow">System state</span>
-              <h2>Readiness and guardrails</h2>
+              <h2>{text({ en: "Readiness and guardrails", zh: "系统状态与保护" })}</h2>
             </div>
             <button
               className="button-secondary button-small"
@@ -129,7 +140,7 @@ export function DashboardOverview() {
               }}
               disabled={busy}
             >
-              {busy ? "Refreshing..." : "Refresh"}
+              {busy ? text({ en: "Refreshing...", zh: "刷新中..." }) : text({ en: "Refresh", zh: "刷新" })}
             </button>
           </div>
           <div className="stack">
@@ -159,7 +170,7 @@ export function DashboardOverview() {
 
         <article className="card">
           <span className="eyebrow">Checklist</span>
-          <h2>Operator attention</h2>
+          <h2>{text({ en: "Operator attention", zh: "当前关注项" })}</h2>
           <ul className="list">
             {(
               state.preflight
@@ -174,8 +185,47 @@ export function DashboardOverview() {
 
       <section className="grid columns-2">
         <article className="card">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Broker accounts</span>
+              <h2>{text({ en: "Paper cash and buying power", zh: "模拟盘现金与购买力" })}</h2>
+            </div>
+            <Link href="/paper" className="button-secondary button-small">
+              {text({ en: "Open Paper", zh: "打开模拟盘" })}
+            </Link>
+          </div>
+          <div className="stack">
+            <BrokerAccountPanel
+              title="Alpaca paper"
+              account={state.alpacaAccount}
+              note={
+                state.readiness?.automation_health.state.last_broker_sync_at
+                  ? `Last sync ${formatTimestamp(state.readiness.automation_health.state.last_broker_sync_at)}`
+                  : "Waiting for broker sync."
+              }
+            />
+            <BrokerAccountPanel
+              title="IBKR paper"
+              account={state.ibAccount}
+              note="Simulator snapshot available for quick portfolio checks."
+            />
+          </div>
+        </article>
+
+        <article className="card">
+          <span className="eyebrow">Open exposure</span>
+          <h2>{text({ en: "Current positions by broker", zh: "按券商查看当前持仓" })}</h2>
+          <div className="stack">
+            <PositionPanel title="Alpaca paper" account={state.alpacaAccount} />
+            <PositionPanel title="IBKR paper" account={state.ibAccount} />
+          </div>
+        </article>
+      </section>
+
+      <section className="grid columns-2">
+        <article className="card">
           <span className="eyebrow">Today's opportunities</span>
-          <h2>Actionable agent calls</h2>
+          <h2>{text({ en: "Actionable agent calls", zh: "可操作机会" })}</h2>
           <div className="stack">
             {actionableIntents.length === 0 ? (
               <p className="muted">No actionable trade intents right now.</p>
@@ -197,7 +247,7 @@ export function DashboardOverview() {
 
         <article className="card">
           <span className="eyebrow">Live queue</span>
-          <h2>Open orders and positions</h2>
+          <h2>{text({ en: "Open orders and positions", zh: "开放订单与持仓" })}</h2>
           <div className="stack">
             {openOrders.length === 0 ? (
               <p className="muted">No open orders at the moment.</p>
@@ -220,7 +270,7 @@ export function DashboardOverview() {
       <section className="grid columns-2">
         <article className="card">
           <span className="eyebrow">Risk blockade</span>
-          <h2>Why the system is saying no</h2>
+          <h2>{text({ en: "Why the system is saying no", zh: "系统为何拦截" })}</h2>
           <div className="stack">
             {blockedIntents.length === 0 ? (
               <p className="muted">No blocked trade intents at the moment.</p>
@@ -237,7 +287,7 @@ export function DashboardOverview() {
 
         <article className="card">
           <span className="eyebrow">Agent activity</span>
-          <h2>Recent completed analyses</h2>
+          <h2>{text({ en: "Recent completed analyses", zh: "最近完成的分析" })}</h2>
           <div className="stack">
             {state.analyses.length === 0 ? (
               <p className="muted">No saved analysis runs yet.</p>
@@ -257,7 +307,7 @@ export function DashboardOverview() {
 
       <section className="card">
         <span className="eyebrow">Audit pulse</span>
-        <h2>Latest system events</h2>
+        <h2>{text({ en: "Latest system events", zh: "最新系统事件" })}</h2>
         <div className="stack">
           {state.audit?.items.length ? (
             state.audit.items.map((item) => (
@@ -291,6 +341,60 @@ function MetricCard({
       <span className="eyebrow">{label}</span>
       <p className="metric">{value}</p>
     </article>
+  );
+}
+
+function BrokerAccountPanel({
+  title,
+  account,
+  note,
+}: {
+  title: string;
+  account: AccountSnapshot | null;
+  note: string;
+}) {
+  return (
+    <div className="inline-panel">
+      <strong>{title}</strong>
+      {account ? (
+        <>
+          <p>
+            cash {formatWholeDollars(account.cash)} • equity {formatWholeDollars(account.equity)}
+          </p>
+          <p>
+            buying power {formatWholeDollars(account.buying_power)} • positions {account.positions.length}
+          </p>
+          <p>{note}</p>
+        </>
+      ) : (
+        <p className="muted">Account snapshot not loaded.</p>
+      )}
+    </div>
+  );
+}
+
+function PositionPanel({
+  title,
+  account,
+}: {
+  title: string;
+  account: AccountSnapshot | null;
+}) {
+  return (
+    <div className="inline-panel">
+      <strong>{title}</strong>
+      {!account || account.positions.length === 0 ? (
+        <p className="muted">No open positions right now.</p>
+      ) : (
+        <ul className="list">
+          {account.positions.slice(0, 4).map((position) => (
+            <li key={`${title}-${position.symbol}`}>
+              {position.symbol} • {position.quantity} • {formatWholeDollars(position.market_value)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

@@ -95,6 +95,11 @@ a {
   border-radius: 16px;
   color: var(--muted);
   border: 1px solid transparent;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
 }
 
 .terminal-nav-item.is-active {
@@ -123,16 +128,18 @@ a {
   backdrop-filter: blur(10px);
 }
 
-.terminal-search {
-  min-height: 44px;
-  min-width: min(420px, 100%);
-  padding: 0 16px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: rgba(17, 26, 49, 0.95);
-  display: inline-flex;
-  align-items: center;
+.terminal-topbar-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.terminal-topbar-copy strong {
+  font-size: 0.95rem;
+}
+
+.terminal-topbar-copy span {
   color: var(--muted);
+  font-size: 0.88rem;
 }
 
 .terminal-meta {
@@ -168,6 +175,29 @@ a {
   border: 1px solid var(--line);
   background: rgba(17, 26, 49, 0.95);
   color: var(--text);
+}
+
+.locale-toggle {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(17, 26, 49, 0.92);
+}
+
+.locale-toggle-button {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+}
+
+.locale-toggle-button.is-active {
+  background: rgba(74, 227, 164, 0.12);
+  color: var(--accent);
 }
 
 .auth-shell {

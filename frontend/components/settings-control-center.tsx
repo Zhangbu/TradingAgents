@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { startTransition, useEffect, useState } from "react";
 
 import { apiRequest } from "../lib/api";
@@ -420,6 +421,9 @@ export function SettingsControlCenter() {
             <button className="button" type="button" onClick={savePreferences}>
               Save operator defaults
             </button>
+            <Link href="/strategies" className="button-secondary">
+              Open full strategy workspace
+            </Link>
           </div>
         </article>
 

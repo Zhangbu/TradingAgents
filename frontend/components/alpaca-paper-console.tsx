@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { startTransition, useEffect, useState } from "react";
 
 import { apiBaseUrl, apiRequest } from "../lib/api";
@@ -936,7 +937,12 @@ export function AlpacaPaperConsole() {
             <span className="eyebrow">Orders</span>
             <h2>Recent Alpaca paper orders</h2>
           </div>
-          <p className="muted">Use sync and cancel here while we build the fuller trading desk.</p>
+          <div className="actions">
+            <p className="muted">Use sync and cancel here while we build the fuller trading desk.</p>
+            <Link href="/orders-audit" className="button-secondary button-small">
+              Open Orders & Audit
+            </Link>
+          </div>
         </div>
         <div className="order-table">
           {orders.length === 0 ? (

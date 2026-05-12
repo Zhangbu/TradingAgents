@@ -5,8 +5,11 @@ export default function BacktestingPage() {
   return (
     <TerminalShell
       activeHref="/backtesting"
-      title="Backtesting Terminal"
-      subtitle="A planned simulation workspace that will reuse the same strategy, signal, and risk semantics as the live operator workflow."
+      title={{ en: "Backtesting", zh: "回测" }}
+      subtitle={{
+        en: "Keep the simulation workspace nearby while the paper workflow continues to mature.",
+        zh: "在模拟盘工作流逐步稳定的同时，保留回测工作区入口。",
+      }}
     >
       <BacktestingTerminal />
     </TerminalShell>
