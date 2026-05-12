@@ -230,6 +230,8 @@ TRADINGAGENTS_AUTH_SESSION_TTL_HOURS=24
 TRADINGAGENTS_AUTH_COOKIE_SECURE=true
 ```
 
+Login attempts are also rate-limited in memory, so repeated bad passwords will temporarily block the login endpoint.
+
 And in `frontend/.env.local` or your deployment environment:
 
 ```bash
@@ -243,6 +245,27 @@ For internet-facing testing, also keep these deployment rules:
 - do not expose raw `8000` or `3000` directly
 - place a reverse proxy such as Nginx in front of the frontend and backend
 - keep HTTPS enabled so the auth cookie can stay `Secure`
+
+### Cloud Deployment Templates
+
+This repo now includes Tencent Cloud-friendly deployment templates you can adapt directly:
+
+- `deploy/systemd/tradingagents-api.service`
+- `deploy/systemd/tradingagents-web.service`
+- `deploy/nginx/tradingagents.conf`
+- `scripts/deploy/check_server_env.sh`
+- `scripts/deploy/build_frontend.sh`
+- `scripts/deploy/restart_services.sh`
+- `.env.cloud.example`
+- `frontend/.env.production.example`
+
+Recommended rollout order:
+
+1. Copy `.env.cloud.example` to `.env` and fill in your production secrets.
+2. Copy `frontend/.env.production.example` to `frontend/.env.local` or your deployment environment.
+3. Build the frontend with `./scripts/deploy/build_frontend.sh`.
+4. Install the `systemd` and `nginx` templates on the server.
+5. Start the backend and frontend services, then reload Nginx.
 
 For an NVIDIA-hosted NIM/API Catalog setup, use the OpenAI-compatible endpoint:
 

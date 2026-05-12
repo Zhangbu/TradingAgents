@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from backend.app.schemas.analysis import FailureDetails
 from backend.app.schemas.audit import AuditEventType
-from backend.app.schemas.order import BrokerSyncResult, OrderStatus
+from backend.app.schemas.order import BrokerSyncResult, OrderStatus, ReconciliationDiff
 from backend.app.services.audit_log_service import AuditLogService
 from backend.app.services.automation_control_service import AutomationControlService
 from backend.app.services.order_repository import OrderRepository
@@ -53,17 +53,25 @@ class ReconciliationService:
             self._mark_sync_failure(failure_details.message)
             raise ValueError(f"Broker sync failed: {exc}") from exc
 
+        order_diffs = self._build_order_diffs([synced])
+        position_diffs = self._build_position_diffs(snapshot)
+        account_diffs = self._build_account_diffs(snapshot)
         result = BrokerSyncResult(
             synced_orders=[synced],
             account_snapshot=snapshot,
             matched_positions=snapshot.positions,
             unmatched_local_symbols=self._find_unmatched_local_symbols(snapshot),
             unmatched_broker_symbols=self._find_unmatched_broker_symbols(snapshot),
+            order_diffs=order_diffs,
+            position_diffs=position_diffs,
+            account_diffs=account_diffs,
             cash_diff=0.0,
             equity_diff=0.0,
             requires_operator_review=bool(
                 self._find_unmatched_local_symbols(snapshot)
                 or self._find_unmatched_broker_symbols(snapshot)
+                or order_diffs
+                or account_diffs
             ),
             summary_message=self._build_summary_message(snapshot),
         )
@@ -92,17 +100,25 @@ class ReconciliationService:
             self._mark_sync_failure(f"Broker sync failed: {exc}")
             raise ValueError(f"Broker sync failed: {exc}") from exc
 
+        order_diffs = self._build_order_diffs(synced_orders)
+        position_diffs = self._build_position_diffs(snapshot)
+        account_diffs = self._build_account_diffs(snapshot)
         result = BrokerSyncResult(
             synced_orders=synced_orders,
             account_snapshot=snapshot,
             matched_positions=snapshot.positions,
             unmatched_local_symbols=self._find_unmatched_local_symbols(snapshot),
             unmatched_broker_symbols=self._find_unmatched_broker_symbols(snapshot),
+            order_diffs=order_diffs,
+            position_diffs=position_diffs,
+            account_diffs=account_diffs,
             cash_diff=0.0,
             equity_diff=0.0,
             requires_operator_review=bool(
                 self._find_unmatched_local_symbols(snapshot)
                 or self._find_unmatched_broker_symbols(snapshot)
+                or order_diffs
+                or account_diffs
             ),
             summary_message=self._build_summary_message(snapshot),
         )
@@ -138,6 +154,88 @@ class ReconciliationService:
                 "broker symbols before trusting the account state."
             )
         return "Reconciliation completed without symbol mismatches."
+
+    def _build_order_diffs(self, orders) -> list[ReconciliationDiff]:
+        diffs: list[ReconciliationDiff] = []
+        for order in orders:
+            if order.failure_details is not None:
+                diffs.append(
+                    ReconciliationDiff(
+                        category="order",
+                        field="failure_details",
+                        severity="critical",
+                        local_value=order.status.value,
+                        broker_value=order.broker_status_raw,
+                        message=order.failure_details.message,
+                    )
+                )
+            elif order.broker_status_raw and order.status.value != order.broker_status_raw:
+                diffs.append(
+                    ReconciliationDiff(
+                        category="order",
+                        field="status",
+                        severity="warning",
+                        local_value=order.status.value,
+                        broker_value=order.broker_status_raw,
+                        message=(
+                            f"Local order status is {order.status.value} while the broker "
+                            f"reports {order.broker_status_raw}."
+                        ),
+                    )
+                )
+        return diffs
+
+    def _build_position_diffs(self, snapshot) -> list[ReconciliationDiff]:
+        diffs: list[ReconciliationDiff] = []
+        for symbol in self._find_unmatched_local_symbols(snapshot):
+            diffs.append(
+                ReconciliationDiff(
+                    category="position",
+                    field="symbol",
+                    severity="warning",
+                    local_value=symbol,
+                    broker_value=None,
+                    message=f"{symbol} exists in local order history but not in broker positions.",
+                )
+            )
+        for symbol in self._find_unmatched_broker_symbols(snapshot):
+            diffs.append(
+                ReconciliationDiff(
+                    category="position",
+                    field="symbol",
+                    severity="warning",
+                    local_value=None,
+                    broker_value=symbol,
+                    message=f"{symbol} exists in broker positions but not in local order history.",
+                )
+            )
+        return diffs
+
+    def _build_account_diffs(self, snapshot) -> list[ReconciliationDiff]:
+        diffs: list[ReconciliationDiff] = []
+        if snapshot.cash < 0:
+            diffs.append(
+                ReconciliationDiff(
+                    category="account",
+                    field="cash",
+                    severity="warning",
+                    local_value=snapshot.cash,
+                    broker_value=snapshot.cash,
+                    message="Account cash is negative after sync and should be reviewed.",
+                )
+            )
+        if snapshot.buying_power < 0:
+            diffs.append(
+                ReconciliationDiff(
+                    category="account",
+                    field="buying_power",
+                    severity="warning",
+                    local_value=snapshot.buying_power,
+                    broker_value=snapshot.buying_power,
+                    message="Buying power is negative after sync and should be reviewed.",
+                )
+            )
+        return diffs
 
     def _build_failure_details(
         self,

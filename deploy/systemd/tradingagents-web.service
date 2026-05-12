@@ -1,0 +1,15 @@
+[Unit]
+Description=TradingAgents Next.js Frontend
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/apps/TradingAgents/frontend
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/bash -lc 'source /home/ubuntu/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run start -- --hostname 127.0.0.1 --port 3000'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

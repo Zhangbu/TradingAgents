@@ -173,11 +173,23 @@ export interface BrokerSyncResult {
   }>;
   unmatched_local_symbols: string[];
   unmatched_broker_symbols: string[];
+  order_diffs: ReconciliationDiff[];
+  position_diffs: ReconciliationDiff[];
+  account_diffs: ReconciliationDiff[];
   cash_diff: number;
   equity_diff: number;
   requires_operator_review: boolean;
   summary_message?: string;
   failure_details?: FailureDetails | null;
+}
+
+export interface ReconciliationDiff {
+  category: string;
+  field: string;
+  severity: string;
+  local_value?: string | number | null;
+  broker_value?: string | number | null;
+  message: string;
 }
 
 export interface AutomationState {

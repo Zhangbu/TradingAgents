@@ -41,6 +41,8 @@ class Settings:
         self.auth_password = os.getenv("TRADINGAGENTS_AUTH_PASSWORD")
         self.auth_secret = os.getenv("TRADINGAGENTS_AUTH_SECRET")
         self.auth_session_ttl_hours = int(os.getenv("TRADINGAGENTS_AUTH_SESSION_TTL_HOURS", "24"))
+        self.auth_max_login_attempts = int(os.getenv("TRADINGAGENTS_AUTH_MAX_LOGIN_ATTEMPTS", "5"))
+        self.auth_login_window_minutes = int(os.getenv("TRADINGAGENTS_AUTH_LOGIN_WINDOW_MINUTES", "15"))
         self.auth_cookie_secure = os.getenv(
             "TRADINGAGENTS_AUTH_COOKIE_SECURE",
             "true" if self.environment != "development" else "false",

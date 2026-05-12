@@ -1,0 +1,15 @@
+[Unit]
+Description=TradingAgents FastAPI Backend
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/apps/TradingAgents
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ubuntu/miniconda3/envs/tradingagents/bin/uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

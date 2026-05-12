@@ -9,7 +9,16 @@ import {
   formatWholeDollars,
   getTodayDateInputValue,
 } from "../lib/format";
-import { explainBrokerStatus, summarizeExecutionState } from "../lib/order-status";
+import {
+  loadOperatorPreferences,
+  OPERATOR_PREFERENCES_EVENT,
+} from "../shared/operator-preferences";
+import {
+  buildBrokerTimeline,
+  explainBrokerStatus,
+  recommendNextPaperAction,
+  summarizeExecutionState,
+} from "../lib/order-status";
 import type {
   AccountSnapshot,
   AlpacaPaperReadiness,
@@ -60,7 +69,34 @@ export function AlpacaPaperConsole() {
 
   useEffect(() => {
     setTradeDate(getTodayDateInputValue());
+    const preferences = loadOperatorPreferences();
+    setSymbol(preferences.defaultSymbol);
+    if (preferences.defaultMode === "paper_auto" || preferences.defaultMode === "paper_manual") {
+      setFlowMode(preferences.defaultMode);
+    }
+    setReferencePrice(preferences.defaultReferencePrice);
+    setLimitPrice(preferences.defaultLimitPrice);
     void refreshConsole();
+  }, []);
+
+  useEffect(() => {
+    function handlePreferencesChanged(event: Event) {
+      const detail = (event as CustomEvent).detail;
+      if (!detail) {
+        return;
+      }
+      setSymbol(detail.defaultSymbol ?? "AAPL");
+      if (detail.defaultMode === "paper_auto" || detail.defaultMode === "paper_manual") {
+        setFlowMode(detail.defaultMode);
+      }
+      setReferencePrice(detail.defaultReferencePrice ?? "100");
+      setLimitPrice(detail.defaultLimitPrice ?? "1");
+    }
+
+    window.addEventListener(OPERATOR_PREFERENCES_EVENT, handlePreferencesChanged);
+    return () => {
+      window.removeEventListener(OPERATOR_PREFERENCES_EVENT, handlePreferencesChanged);
+    };
   }, []);
 
   async function refreshConsole() {
@@ -322,6 +358,8 @@ export function AlpacaPaperConsole() {
     ? explainBrokerStatus(focusOrder.broker_status_raw, focusOrder.status)
     : null;
   const focusExecutionState = focusOrder ? summarizeExecutionState(focusOrder) : null;
+  const nextPaperAction = recommendNextPaperAction(focusOrder);
+  const brokerTimeline = buildBrokerTimeline(focusOrder, []);
   const manualChecks = preflight?.paper_manual.checks ?? [];
   const autoChecks = preflight?.paper_auto.checks ?? [];
 
@@ -400,6 +438,23 @@ export function AlpacaPaperConsole() {
       </section>
 
       <section className="grid columns-2 section-tight">
+        <article className="card">
+          <span className="eyebrow">Operator guidance</span>
+          <h2>Next best action</h2>
+          <div className="stack">
+            <div className="inline-panel">
+              <strong>{nextPaperAction.label}</strong>
+              <p>{nextPaperAction.detail}</p>
+            </div>
+            {focusExecutionState ? (
+              <div className={`inline-panel execution-state execution-${focusExecutionState.tone}`}>
+                <strong>{focusExecutionState.label}</strong>
+                <p>{focusExecutionState.detail}</p>
+              </div>
+            ) : null}
+          </div>
+        </article>
+
         <article className="card">
           <span className="eyebrow">Analysis runtime</span>
           <h2>Current provider and data source</h2>
@@ -755,6 +810,23 @@ export function AlpacaPaperConsole() {
                   <p>{focusExecutionState.detail}</p>
                 </div>
               ) : null}
+              <div className="timeline-card">
+                <strong>Broker timeline</strong>
+                <div className="timeline-list">
+                  {brokerTimeline.map((event) => (
+                    <div key={event.label} className={`timeline-entry timeline-${event.state}`}>
+                      <div className="timeline-marker" />
+                      <div className="timeline-body">
+                        <div className="timeline-heading">
+                          <strong>{event.label}</strong>
+                          <span>{formatTimestamp(event.timestamp)}</span>
+                        </div>
+                        <p>{event.detail}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <OrderTimeline
                 order={focusOrder}
                 analysis={launchResult.analysis?.id === focusOrder.analysis_id ? launchResult.analysis : null}
@@ -763,7 +835,7 @@ export function AlpacaPaperConsole() {
               />
               <FailureCallout failure={focusOrder.failure_details} />
               {lastSyncResult ? (
-                <div className="inline-panel">
+                <div className="timeline-card">
                   <strong>Reconciliation snapshot</strong>
                   <p>{lastSyncResult.summary_message ?? "Sync completed."}</p>
                   {lastSyncResult.requires_operator_review ? (
@@ -772,6 +844,21 @@ export function AlpacaPaperConsole() {
                       unmatched broker: {formatSymbolList(lastSyncResult.unmatched_broker_symbols)}
                     </p>
                   ) : null}
+                  <ReconciliationDiffList
+                    title="Order diffs"
+                    items={lastSyncResult.order_diffs}
+                    emptyLabel="No order-level mismatches."
+                  />
+                  <ReconciliationDiffList
+                    title="Position diffs"
+                    items={lastSyncResult.position_diffs}
+                    emptyLabel="No position-level mismatches."
+                  />
+                  <ReconciliationDiffList
+                    title="Account diffs"
+                    items={lastSyncResult.account_diffs}
+                    emptyLabel="No account-level mismatches."
+                  />
                   <FailureCallout failure={lastSyncResult.failure_details} compact />
                 </div>
               ) : null}
@@ -1011,6 +1098,37 @@ function FlowSuitability({
           ? topIssue.recommended_action ?? topIssue.message
           : "All workflow gates currently look healthy."}
       </p>
+    </div>
+  );
+}
+
+function ReconciliationDiffList({
+  title,
+  items,
+  emptyLabel,
+}: {
+  title: string;
+  items: BrokerSyncResult["order_diffs"];
+  emptyLabel: string;
+}) {
+  return (
+    <div className="stack section-tight">
+      <strong>{title}</strong>
+      {items.length === 0 ? (
+        <p className="muted">{emptyLabel}</p>
+      ) : (
+        items.map((item) => (
+          <div key={`${item.category}-${item.field}-${item.message}`} className="inline-panel">
+            <strong>
+              {item.field} • {item.severity}
+            </strong>
+            <p>{item.message}</p>
+            <p>
+              local {String(item.local_value ?? "--")} • broker {String(item.broker_value ?? "--")}
+            </p>
+          </div>
+        ))
+      )}
     </div>
   );
 }

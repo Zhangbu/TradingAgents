@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+from collections import deque
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Request
@@ -11,6 +12,7 @@ from fastapi import Request
 from backend.app.core.config import Settings
 
 SESSION_COOKIE_NAME = "tradingagents_session"
+_FAILED_LOGIN_ATTEMPTS: dict[str, deque[datetime]] = {}
 
 
 def create_session_token(username: str, settings: Settings) -> str:
@@ -62,6 +64,29 @@ def get_authenticated_username(request: Request, settings: Settings) -> str | No
     return verify_session_token(token, settings)
 
 
+def is_login_rate_limited(client_key: str, settings: Settings) -> bool:
+    attempts = _get_recent_attempts(client_key, settings)
+    return len(attempts) >= settings.auth_max_login_attempts
+
+
+def register_failed_login(client_key: str, settings: Settings) -> None:
+    attempts = _get_recent_attempts(client_key, settings)
+    attempts.append(datetime.now(timezone.utc))
+
+
+def clear_failed_logins(client_key: str) -> None:
+    _FAILED_LOGIN_ATTEMPTS.pop(client_key, None)
+
+
+def get_login_client_key(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+
+    client = request.client
+    return client.host if client else "unknown"
+
+
 def _sign(encoded_payload: str, secret: str) -> str:
     return hmac.new(
         secret.encode("utf-8"),
@@ -77,3 +102,13 @@ def _b64encode(value: bytes) -> str:
 def _b64decode(value: str) -> bytes:
     padding = "=" * (-len(value) % 4)
     return base64.urlsafe_b64decode(value + padding)
+
+
+def _get_recent_attempts(client_key: str, settings: Settings) -> deque[datetime]:
+    window_start = datetime.now(timezone.utc) - timedelta(minutes=settings.auth_login_window_minutes)
+    attempts = _FAILED_LOGIN_ATTEMPTS.setdefault(client_key, deque())
+
+    while attempts and attempts[0] < window_start:
+        attempts.popleft()
+
+    return attempts

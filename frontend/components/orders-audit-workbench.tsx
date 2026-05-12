@@ -4,7 +4,12 @@ import { startTransition, useEffect, useState } from "react";
 
 import { apiRequest } from "../lib/api";
 import { formatPrice, formatTimestamp } from "../lib/format";
-import { explainBrokerStatus, summarizeExecutionState } from "../lib/order-status";
+import {
+  buildBrokerTimeline,
+  explainBrokerStatus,
+  recommendNextPaperAction,
+  summarizeExecutionState,
+} from "../lib/order-status";
 import type {
   AnalysisRunRecord,
   AuditLogListResponse,
@@ -25,6 +30,7 @@ export function OrdersAuditWorkbench() {
   const [symbolFilter, setSymbolFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [brokerFilter, setBrokerFilter] = useState("all");
+  const [executionFilter, setExecutionFilter] = useState("all");
   const [attentionOnly, setAttentionOnly] = useState(false);
 
   useEffect(() => {
@@ -37,12 +43,15 @@ export function OrdersAuditWorkbench() {
       order.symbol.toLowerCase().includes(symbolFilter.trim().toLowerCase());
     const statusMatches = statusFilter === "all" || order.status === statusFilter;
     const brokerMatches = brokerFilter === "all" || order.broker_name === brokerFilter;
+    const executionMatches =
+      executionFilter === "all" ||
+      summarizeExecutionState(order).label.toLowerCase() === executionFilter;
     const attentionMatches =
       !attentionOnly ||
       order.status === "failed" ||
       order.status === "pending_approval" ||
       Boolean(order.failure_details);
-    return symbolMatches && statusMatches && brokerMatches && attentionMatches;
+    return symbolMatches && statusMatches && brokerMatches && executionMatches && attentionMatches;
   });
 
   const selectedOrder =
@@ -55,6 +64,11 @@ export function OrdersAuditWorkbench() {
   const selectedExecutionState = selectedOrder
     ? summarizeExecutionState(selectedOrder)
     : null;
+  const selectedNextAction = recommendNextPaperAction(selectedOrder);
+  const brokerTimeline = buildBrokerTimeline(selectedOrder, selectedAudit);
+  const reconciliationEvents = selectedAudit.filter(
+    (item) => item.event_type === "broker_synced" || item.event_type === "reconciliation_completed",
+  );
 
   useEffect(() => {
     if (!selectedOrder) {
@@ -161,6 +175,19 @@ export function OrdersAuditWorkbench() {
               <option value="interactive_brokers">interactive_brokers</option>
             </select>
           </label>
+          <label className="field">
+            <span>Execution</span>
+            <select
+              value={executionFilter}
+              onChange={(event) => setExecutionFilter(event.target.value)}
+            >
+              <option value="all">all</option>
+              <option value="waiting for market">waiting for market</option>
+              <option value="in progress">in progress</option>
+              <option value="closed">closed</option>
+              <option value="execution issue">execution issue</option>
+            </select>
+          </label>
           <label className="field field-checkbox">
             <span>Needs attention</span>
             <input
@@ -265,6 +292,30 @@ export function OrdersAuditWorkbench() {
               </div>
             ) : null}
 
+            <div className="inline-panel">
+              <strong>Next action</strong>
+              <p>{selectedNextAction.label}</p>
+              <p>{selectedNextAction.detail}</p>
+            </div>
+
+            <div className="timeline-card">
+              <strong>Broker timeline</strong>
+              <div className="timeline-list">
+                {brokerTimeline.map((event) => (
+                  <div key={event.label} className={`timeline-entry timeline-${event.state}`}>
+                    <div className="timeline-marker" />
+                    <div className="timeline-body">
+                      <div className="timeline-heading">
+                        <strong>{event.label}</strong>
+                        <span>{formatTimestamp(event.timestamp)}</span>
+                      </div>
+                      <p>{event.detail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <FailurePanel failure={selectedOrder.failure_details} />
 
             <div className="inline-panel">
@@ -307,6 +358,25 @@ export function OrdersAuditWorkbench() {
                       {Object.keys(item.metadata ?? {}).length > 0 ? (
                         <p className="muted">{formatMetadata(item.metadata)}</p>
                       ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="inline-panel">
+              <strong>Reconciliation trail</strong>
+              {detailBusy ? (
+                <p className="muted">Loading reconciliation events...</p>
+              ) : reconciliationEvents.length === 0 ? (
+                <p className="muted">No broker sync or reconciliation events recorded yet.</p>
+              ) : (
+                <div className="stack">
+                  {reconciliationEvents.map((item) => (
+                    <div key={item.id} className="inline-panel">
+                      <strong>{item.event_type}</strong>
+                      <p>{formatTimestamp(item.created_at)}</p>
+                      <p className="muted">{formatMetadata(item.metadata)}</p>
                     </div>
                   ))}
                 </div>

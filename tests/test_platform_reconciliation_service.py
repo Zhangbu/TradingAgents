@@ -48,6 +48,8 @@ class ReconciliationServiceTest(unittest.TestCase):
             self.assertEqual(len(result.synced_orders), 1)
             self.assertIsNotNone(result.synced_orders[0].last_synced_at)
             self.assertEqual(result.unmatched_local_symbols, ["AAPL"])
+            self.assertEqual(len(result.position_diffs), 1)
+            self.assertEqual(result.position_diffs[0].category, "position")
             self.assertTrue(automation_service.get_state().broker_sync_healthy)
             self.assertIn("mismatches", result.summary_message or "")
 

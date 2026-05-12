@@ -83,6 +83,15 @@ class AccountSnapshot(BaseModel):
     positions: list[PositionRecord] = Field(default_factory=list)
 
 
+class ReconciliationDiff(BaseModel):
+    category: str
+    field: str
+    severity: str
+    local_value: str | float | int | None = None
+    broker_value: str | float | int | None = None
+    message: str
+
+
 class OrderRecord(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     intent_id: str
@@ -126,6 +135,9 @@ class BrokerSyncResult(BaseModel):
     matched_positions: list[PositionRecord] = Field(default_factory=list)
     unmatched_local_symbols: list[str] = Field(default_factory=list)
     unmatched_broker_symbols: list[str] = Field(default_factory=list)
+    order_diffs: list[ReconciliationDiff] = Field(default_factory=list)
+    position_diffs: list[ReconciliationDiff] = Field(default_factory=list)
+    account_diffs: list[ReconciliationDiff] = Field(default_factory=list)
     cash_diff: float = 0.0
     equity_diff: float = 0.0
     requires_operator_review: bool = False

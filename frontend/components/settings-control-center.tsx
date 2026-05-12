@@ -3,6 +3,13 @@
 import { startTransition, useEffect, useState } from "react";
 
 import { apiRequest } from "../lib/api";
+import {
+  defaultOperatorPreferences,
+  loadOperatorPreferences,
+  saveOperatorPreferences,
+  type OperatorPreferences,
+  type VendorPreset,
+} from "../shared/operator-preferences";
 import type {
   AlpacaPaperReadiness,
   AnalysisRuntimeCatalog,
@@ -30,8 +37,10 @@ export function SettingsControlCenter() {
   const [schedulerInterval, setSchedulerInterval] = useState("30");
   const [schedulerTargetMode, setSchedulerTargetMode] =
     useState<SchedulerTargetMode>("paper_auto");
+  const [preferences, setPreferences] = useState<OperatorPreferences>(defaultOperatorPreferences);
 
   useEffect(() => {
+    setPreferences(loadOperatorPreferences());
     void refresh();
   }, []);
 
@@ -210,6 +219,11 @@ export function SettingsControlCenter() {
     }
   }
 
+  function savePreferences() {
+    saveOperatorPreferences(preferences);
+    setNotice("Operator defaults saved for analysis and paper workflows.");
+  }
+
   return (
     <div className="stack">
       {(error || notice) && (
@@ -308,6 +322,107 @@ export function SettingsControlCenter() {
       </section>
 
       <section className="grid columns-2">
+        <article className="card">
+          <span className="eyebrow">Strategy controls</span>
+          <h2>Operator defaults and presets</h2>
+          <div className="form-grid">
+            <label className="field">
+              <span>Default mode</span>
+              <select
+                value={preferences.defaultMode}
+                onChange={(event) =>
+                  setPreferences((current) => ({
+                    ...current,
+                    defaultMode: event.target.value as OperatorPreferences["defaultMode"],
+                  }))
+                }
+              >
+                <option value="paper_manual">paper_manual</option>
+                <option value="paper_auto">paper_auto</option>
+                <option value="analysis_only">analysis_only</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Default symbol</span>
+              <input
+                value={preferences.defaultSymbol}
+                onChange={(event) =>
+                  setPreferences((current) => ({
+                    ...current,
+                    defaultSymbol: event.target.value.toUpperCase(),
+                  }))
+                }
+              />
+            </label>
+            <label className="field">
+              <span>LLM provider preference</span>
+              <input
+                value={preferences.llmProviderPreference}
+                onChange={(event) =>
+                  setPreferences((current) => ({
+                    ...current,
+                    llmProviderPreference: event.target.value,
+                  }))
+                }
+                placeholder={runtimeProfile?.llm_provider ?? "leave empty for runtime default"}
+              />
+            </label>
+            <label className="field">
+              <span>Vendor preset</span>
+              <select
+                value={preferences.vendorPreset}
+                onChange={(event) =>
+                  setPreferences((current) => ({
+                    ...current,
+                    vendorPreset: event.target.value as VendorPreset,
+                  }))
+                }
+              >
+                <option value="safe">safe</option>
+                <option value="balanced">balanced</option>
+                <option value="alpha_vantage_heavy">alpha_vantage_heavy</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Reference price default</span>
+              <input
+                value={preferences.defaultReferencePrice}
+                onChange={(event) =>
+                  setPreferences((current) => ({
+                    ...current,
+                    defaultReferencePrice: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Limit price default</span>
+              <input
+                value={preferences.defaultLimitPrice}
+                onChange={(event) =>
+                  setPreferences((current) => ({
+                    ...current,
+                    defaultLimitPrice: event.target.value,
+                  }))
+                }
+              />
+            </label>
+          </div>
+          <div className="inline-panel">
+            <strong>Preset notes</strong>
+            <p>
+              safe keeps all data on yfinance, balanced uses Alpha Vantage for price and
+              technical data, and alpha_vantage_heavy keeps fundamentals/news on yfinance
+              while leaning harder on Alpha Vantage where your plan allows it.
+            </p>
+          </div>
+          <div className="actions form-actions">
+            <button className="button" type="button" onClick={savePreferences}>
+              Save operator defaults
+            </button>
+          </div>
+        </article>
+
         <article className="card">
           <span className="eyebrow">Data vendor profile</span>
           <h2>Category routing</h2>

@@ -5,6 +5,7 @@ import { startTransition, useEffect, useState } from "react";
 
 import { apiRequest } from "../lib/api";
 import { getTodayDateInputValue } from "../lib/format";
+import { loadOperatorPreferences, OPERATOR_PREFERENCES_EVENT, vendorPresetToMap } from "../shared/operator-preferences";
 import type {
   AnalysisRuntimeCatalog,
   AnalysisRuntimeHealth,
@@ -49,7 +50,36 @@ export function AnalysisWorkspace() {
 
   useEffect(() => {
     setTradeDate(getTodayDateInputValue());
+    const preferences = loadOperatorPreferences();
+    setSymbol(preferences.defaultSymbol);
+    setMode(preferences.defaultMode);
+    if (preferences.llmProviderPreference) {
+      setLlmProvider(preferences.llmProviderPreference);
+    }
+    setDataVendors(vendorPresetToMap(preferences.vendorPreset));
     void Promise.all([refreshAnalysisHistory(), refreshRuntimeDiagnostics()]);
+  }, []);
+
+  useEffect(() => {
+    function handlePreferencesChanged(event: Event) {
+      const detail = (event as CustomEvent).detail;
+      if (!detail) {
+        return;
+      }
+      setSymbol(detail.defaultSymbol ?? "AAPL");
+      setMode(detail.defaultMode ?? "paper_manual");
+      if (detail.llmProviderPreference) {
+        setLlmProvider(detail.llmProviderPreference);
+      }
+      if (detail.vendorPreset) {
+        setDataVendors(vendorPresetToMap(detail.vendorPreset));
+      }
+    }
+
+    window.addEventListener(OPERATOR_PREFERENCES_EVENT, handlePreferencesChanged);
+    return () => {
+      window.removeEventListener(OPERATOR_PREFERENCES_EVENT, handlePreferencesChanged);
+    };
   }, []);
 
   useEffect(() => {
@@ -82,6 +112,7 @@ export function AnalysisWorkspace() {
 
   async function refreshRuntimeDiagnostics() {
     try {
+      const preferences = loadOperatorPreferences();
       const [profile, health, nextPreflight] = await Promise.all([
         apiRequest<AnalysisRuntimeProfile>("/analysis/runtime-profile"),
         apiRequest<AnalysisRuntimeHealth>("/analysis/runtime-health"),
@@ -90,16 +121,10 @@ export function AnalysisWorkspace() {
       setRuntimeProfile(profile);
       setRuntimeHealth(health);
       setPreflight(nextPreflight);
-      setLlmProvider(profile.llm_provider);
+      setLlmProvider(preferences.llmProviderPreference || profile.llm_provider);
       setDeepThinkModel(profile.deep_think_llm);
       setQuickThinkModel(profile.quick_think_llm);
-      setDataVendors({
-        core_stock_apis: (profile.data_vendors.core_stock_apis as DataVendor) ?? "yfinance",
-        technical_indicators:
-          (profile.data_vendors.technical_indicators as DataVendor) ?? "yfinance",
-        fundamental_data: (profile.data_vendors.fundamental_data as DataVendor) ?? "yfinance",
-        news_data: (profile.data_vendors.news_data as DataVendor) ?? "yfinance",
-      });
+      setDataVendors(vendorPresetToMap(preferences.vendorPreset));
       const catalog = await apiRequest<AnalysisRuntimeCatalog>("/analysis/runtime-catalog");
       setRuntimeCatalog(catalog);
     } catch (runtimeError) {
